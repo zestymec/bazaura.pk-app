@@ -7,7 +7,7 @@
     "ios": "react-native run-ios",
     "start": "react-native start",
     "check-types": "tsc --noEmit",
-    "clean:android": "cd android && gradlew clean && cd .."
+    "clean:android": "cd android && ./gradlew clean && cd .."
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "1.23.1",
@@ -27,9 +27,16 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@babel/runtime": "^7.25.0",
+    "@react-native-community/cli": "15.0.1",
+    "@react-native-community/cli-platform-android": "15.0.1",
+    "@react-native-community/cli-platform-ios": "15.0.1",
     "@react-native/babel-preset": "^0.76.7",
     "@react-native/metro-config": "^0.76.7",
     "@types/react": "~18.3.12",
     "typescript": "^5.3.3"
+  },
+  "overrides": {
+    "@react-native-community/cli": "15.0.1",
+    "@react-native-community/cli-server-api": "15.0.1"
   }
 }

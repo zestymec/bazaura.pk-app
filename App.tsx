@@ -1,5 +1,6 @@
 import React from 'react';
-import { StatusBar, StyleSheet, View } from 'react-native';
+import { StatusBar, StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { RootNavigator } from './src/navigation/RootNavigator';
@@ -7,14 +8,14 @@ import { colors } from './src/theme/colors';
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <View style={styles.container}>
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaProvider>
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <NavigationContainer>
           <RootNavigator />
         </NavigationContainer>
-      </View>
-    </SafeAreaProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
