@@ -19,7 +19,7 @@ interface CategoryChipsProps {
   onSelectCategory: (category: Category | null) => void;
 }
 
-export const CategoryChips: React.FC<CategoryChipsProps> = ({
+export const CategoryChips: React.FC<CategoryChipsProps> = React.memo(({
   selectedCategoryId,
   onSelectCategory,
 }) => {
@@ -84,7 +84,7 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
       </ScrollView>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

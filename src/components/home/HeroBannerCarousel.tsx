@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   FlatList,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  ListRenderItemInfo,
 } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 import { PROMO_BANNERS, PromoBanner } from '../../data/banners';
@@ -24,18 +25,53 @@ interface HeroBannerCarouselProps {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_WIDTH = SCREEN_WIDTH - 32;
 
-export const HeroBannerCarousel: React.FC<HeroBannerCarouselProps> = ({
+export const HeroBannerCarousel: React.FC<HeroBannerCarouselProps> = React.memo(({
   onBannerPress,
 }) => {
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const slideSize = event.nativeEvent.layoutMeasurement.width;
     const index = Math.round(event.nativeEvent.contentOffset.x / slideSize);
     if (index !== activeIndex && index >= 0 && index < PROMO_BANNERS.length) {
       setActiveIndex(index);
     }
-  };
+  }, [activeIndex]);
+
+  const renderBannerItem = useCallback(({ item }: ListRenderItemInfo<PromoBanner>) => (
+    <TouchableOpacity
+      activeOpacity={0.92}
+      onPress={() => {
+        haptic.light();
+        onBannerPress(item);
+      }}
+      style={[styles.bannerCard, { width: BANNER_WIDTH }]}
+    >
+      <Image
+        source={{ uri: item.imageUrl }}
+        style={styles.bannerImage}
+        resizeMode="cover"
+      />
+
+      {/* Clean Vignette Overlay */}
+      <View style={styles.gradientOverlay}>
+        <View>
+          <View style={styles.tagBadge}>
+            <Text style={styles.tagText}>{item.tag}</Text>
+          </View>
+          <Text style={styles.titleText}>{item.title}</Text>
+          <Text style={styles.subtitleText} numberOfLines={2}>
+            {item.subtitle}
+          </Text>
+        </View>
+
+        <View style={styles.ctaButton}>
+          <Text style={styles.ctaText}>{item.ctaText}</Text>
+          <ChevronRight size={13} color={colors.neutral.white} />
+        </View>
+      </View>
+    </TouchableOpacity>
+  ), [onBannerPress]);
 
   return (
     <View style={styles.container}>
@@ -47,40 +83,7 @@ export const HeroBannerCarousel: React.FC<HeroBannerCarouselProps> = ({
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={handleScroll}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            activeOpacity={0.92}
-            onPress={() => {
-              haptic.light();
-              onBannerPress(item);
-            }}
-            style={[styles.bannerCard, { width: BANNER_WIDTH }]}
-          >
-            <Image
-              source={{ uri: item.imageUrl }}
-              style={styles.bannerImage}
-              resizeMode="cover"
-            />
-
-            {/* Clean Vignette Overlay */}
-            <View style={styles.gradientOverlay}>
-              <View>
-                <View style={styles.tagBadge}>
-                  <Text style={styles.tagText}>{item.tag}</Text>
-                </View>
-                <Text style={styles.titleText}>{item.title}</Text>
-                <Text style={styles.subtitleText} numberOfLines={2}>
-                  {item.subtitle}
-                </Text>
-              </View>
-
-              <View style={styles.ctaButton}>
-                <Text style={styles.ctaText}>{item.ctaText}</Text>
-                <ChevronRight size={13} color={colors.neutral.white} />
-              </View>
-            </View>
-          </TouchableOpacity>
-        )}
+        renderItem={renderBannerItem}
       />
 
       {/* Clean Pagination Dots */}
@@ -97,7 +100,7 @@ export const HeroBannerCarousel: React.FC<HeroBannerCarouselProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

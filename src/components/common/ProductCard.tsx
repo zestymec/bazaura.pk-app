@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -26,31 +26,32 @@ interface ProductCardProps {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DEFAULT_CARD_WIDTH = (SCREEN_WIDTH - 32 - 10) / 2;
 
-export const ProductCard: React.FC<ProductCardProps> = ({
+export const ProductCard: React.FC<ProductCardProps> = React.memo(({
   product,
   onPress,
   cardWidth = DEFAULT_CARD_WIDTH,
 }) => {
-  const { isInWishlist, toggleWishlist } = useWishlistStore();
-  const { addItem } = useCartStore();
+  const isFavorite = useWishlistStore((state) => state.wishlistIds.includes(product.id));
+  const toggleWishlist = useWishlistStore((state) => state.toggleWishlist);
+  const addItem = useCartStore((state) => state.addItem);
 
-  const isFavorite = isInWishlist(product.id);
-
-  const handleWishlistToggle = () => {
+  const handleWishlistToggle = useCallback(() => {
     toggleWishlist(product.id);
-  };
+  }, [toggleWishlist, product.id]);
 
-  const handleQuickAdd = () => {
+  const handleQuickAdd = useCallback(() => {
     addItem(product, 1);
-  };
+  }, [addItem, product]);
+
+  const handlePress = useCallback(() => {
+    haptic.light();
+    onPress();
+  }, [onPress]);
 
   return (
     <TouchableOpacity
       activeOpacity={0.88}
-      onPress={() => {
-        haptic.light();
-        onPress();
-      }}
+      onPress={handlePress}
       style={[
         styles.container,
         { width: cardWidth },
@@ -131,7 +132,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       </View>
     </TouchableOpacity>
   );
-};
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.product.id === nextProps.product.id &&
+    prevProps.product.price === nextProps.product.price &&
+    prevProps.product.inStock === nextProps.product.inStock &&
+    prevProps.cardWidth === nextProps.cardWidth &&
+    prevProps.onPress === nextProps.onPress
+  );
+});
 
 const styles = StyleSheet.create({
   container: {
