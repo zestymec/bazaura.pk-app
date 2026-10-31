@@ -7,6 +7,8 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { OfflineBanner } from './src/components/common/OfflineBanner';
+import { ToastHost } from './src/components/common/Toast';
+import { navigationRef } from './src/navigation/navigationRef';
 import { queryClient } from './src/hooks/queryClient';
 import { bootstrapSession } from './src/store/session';
 import { colors } from './src/theme/colors';
@@ -35,10 +37,11 @@ export default function App() {
         <SafeAreaProvider>
           <QueryClientProvider client={queryClient}>
             <StatusBar barStyle="dark-content" backgroundColor={colors.neutral.white} />
-            <NavigationContainer theme={navigationTheme}>
+            <NavigationContainer ref={navigationRef} theme={navigationTheme}>
               <RootNavigator />
             </NavigationContainer>
             <OfflineBanner />
+            <ToastHost />
           </QueryClientProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>

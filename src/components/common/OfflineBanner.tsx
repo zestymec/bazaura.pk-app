@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from './AppText';
-import NetInfo from '@react-native-community/netinfo';
+import { netInfo } from '../../utils/netinfo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { WifiOff, RefreshCw } from 'lucide-react-native';
+import { WifiOff, RefreshCw } from '../icons';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii } from '../../theme/spacing';
@@ -18,7 +18,7 @@ export const OfflineBanner: React.FC = () => {
   const [isChecking, setIsChecking] = useState(false);
 
   useEffect(() => {
-    return NetInfo.addEventListener((state) => {
+    return netInfo.addEventListener((state) => {
       // isInternetReachable is null while unknown — don't flash the banner then.
       setIsOffline(state.isConnected === false || state.isInternetReachable === false);
     });
@@ -26,7 +26,7 @@ export const OfflineBanner: React.FC = () => {
 
   const handleRetry = async () => {
     setIsChecking(true);
-    const state = await NetInfo.refresh();
+    const state = await netInfo.refresh();
     setIsOffline(state.isConnected === false || state.isInternetReachable === false);
     setIsChecking(false);
   };
@@ -34,7 +34,7 @@ export const OfflineBanner: React.FC = () => {
   if (!isOffline) return null;
 
   return (
-    <View pointerEvents="box-none" style={[styles.banner, { bottom: insets.bottom + 76 }]}>
+    <View pointerEvents="box-none" style={[styles.banner, { bottom: insets.bottom + 72 }]}>
       <View style={styles.leftRow}>
         <WifiOff size={14} color={colors.neutral.white} />
         <Text style={styles.bannerText}>You're offline. Showing saved items.</Text>

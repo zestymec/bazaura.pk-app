@@ -26,3 +26,4 @@
 -keep class com.th3rdwave.safeareacontext.** { *; }
 -keep class com.horcrux.svg.** { *; }
 -keep class com.reactnativecommunity.asyncstorage.** { *; }
+-keep class com.oblador.keychain.** { *; }

@@ -1,91 +1,50 @@
-import { env } from '../config/env';
-import { tokenStorage } from '../api/tokenStorage';
-import { setSessionExpiredHandler } from '../api/client';
-import { authService } from '../api/services/auth';
-import { usersService } from '../api/services/users';
-import { ordersService } from '../api/services/orders';
-import { requestsService } from '../api/services/requests';
-import { wishlistService } from '../api/services/wishlist';
-import { mockServer } from '../api/mock/server';
+import { api } from '../api/endpoints';
+import { clearTokens, hasSession, saveTokens, setSessionExpiredHandler } from '../api/client';
+import type { AuthResult } from '../api/types';
+import { qk } from '../api/queryKeys';
 import { queryClient } from '../hooks/queryClient';
-import { useUserStore } from './useUserStore';
-import { useWishlistStore } from './useWishlistStore';
-import { useRequestStore } from './useRequestStore';
+import { navigationRef } from '../navigation/navigationRef';
+import { useAuthStore } from './auth';
 
-/**
- * Pulls the signed-in user's account data into the local stores.
- * Failures are swallowed: the persisted copy keeps the UI usable offline.
- */
-export async function syncAccountData() {
-  if (!useUserStore.getState().isAuthenticated) return;
-  const [me, orders, requests, wishlist] = await Promise.allSettled([
-    usersService.me(),
-    ordersService.list(),
-    requestsService.list(),
-    wishlistService.list(),
-  ]);
-  const user = useUserStore.getState();
-  if (me.status === 'fulfilled') user.setUser(me.value);
-  if (orders.status === 'fulfilled') user.setOrders(orders.value);
-  if (requests.status === 'fulfilled') useRequestStore.getState().setRequests(requests.value);
-  if (wishlist.status === 'fulfilled') {
-    // Keep anything saved as a guest, then push it up so it isn't lost.
-    const local = useWishlistStore.getState().wishlistIds;
-    const remote = wishlist.value.productIds;
-    const missing = local.filter((id) => !remote.includes(id));
-    useWishlistStore.getState().setWishlist([...remote, ...missing]);
-    missing.forEach((id) => wishlistService.toggle(id).catch(() => {}));
-  }
+/** Stores the session from POST /auth/otp/verify (§7.2). */
+export async function completeLogin(result: AuthResult) {
+  await saveTokens(result.accessToken, result.refreshToken);
+  const auth = useAuthStore.getState();
+  auth.setUser(result.user);
+  auth.setLoggedIn(true);
+  queryClient.invalidateQueries({ queryKey: qk.me });
+  queryClient.invalidateQueries({ queryKey: qk.wishlist });
 }
 
-export async function login(phone: string, otpCode: string, fullName?: string) {
-  const session = await authService.verifyOtp({ phone, otp_code: otpCode, full_name: fullName });
-  await tokenStorage.set({ accessToken: session.access_token, refreshToken: session.refresh_token });
-  useUserStore.getState().setSession(session.user);
-  await syncAccountData();
-}
-
+/** No logout endpoint exists: clear tokens, auth state and cached server data. Keeps the cart. */
 export async function logout() {
-  await tokenStorage.clear();
-  if (env.USE_MOCK_API) mockServer.restoreSession(null);
-  useUserStore.getState().resetToGuest();
-  useRequestStore.getState().setRequests([]);
-  useWishlistStore.getState().clearWishlist();
-  queryClient.removeQueries({ queryKey: ['account'] });
+  await clearTokens();
+  useAuthStore.getState().reset();
+  queryClient.clear();
 }
 
-function whenHydrated(store: { persist: { hasHydrated: () => boolean; onFinishHydration: (fn: () => void) => () => void } }) {
-  return new Promise<void>((resolve) => {
-    if (store.persist.hasHydrated()) return resolve();
-    const unsub = store.persist.onFinishHydration(() => {
-      unsub();
-      resolve();
-    });
-  });
-}
-
-/** Called once on app start. */
+/** App start (§7.1). */
 export async function bootstrapSession() {
   setSessionExpiredHandler(() => {
     logout();
+    if (navigationRef.isReady()) navigationRef.navigate('Login', { reason: 'Your session expired. Please log in again.' });
   });
 
-  await whenHydrated(useUserStore);
-  const { isAuthenticated, user } = useUserStore.getState();
-  const tokens = await tokenStorage.get();
+  queryClient.prefetchQuery({ queryKey: qk.config, queryFn: api.config, staleTime: 10 * 60_000 });
 
-  if (isAuthenticated && !tokens) {
-    // Persisted flag without tokens (e.g. storage cleared) → treat as guest.
-    useUserStore.getState().resetToGuest();
+  const loggedIn = await hasSession();
+  const auth = useAuthStore.getState();
+  if (!loggedIn) {
+    if (auth.user) auth.reset();
     return;
   }
-  if (env.USE_MOCK_API) {
-    await Promise.all([whenHydrated(useRequestStore), whenHydrated(useWishlistStore)]);
-    mockServer.restoreSession(isAuthenticated ? user : null, {
-      orders: useUserStore.getState().orders,
-      requests: useRequestStore.getState().requests,
-      wishlistIds: useWishlistStore.getState().wishlistIds,
-    });
-  }
-  syncAccountData();
+  auth.setLoggedIn(true);
+  queryClient.prefetchQuery({
+    queryKey: qk.me,
+    queryFn: async () => {
+      const me = await api.me();
+      useAuthStore.getState().setUser(me);
+      return me;
+    },
+  });
 }

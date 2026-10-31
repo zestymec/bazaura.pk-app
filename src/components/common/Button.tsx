@@ -4,6 +4,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   ViewStyle,
+  StyleProp,
   TextStyle,
   View,
 } from 'react-native';
@@ -12,7 +13,6 @@ import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii } from '../../theme/spacing';
 import { haptic } from '../../utils/haptics';
-import { sound } from '../../utils/audio';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'gold';
 export type ButtonSize = 'sm' | 'md' | 'lg';
@@ -26,9 +26,8 @@ interface ButtonProps {
   loading?: boolean;
   icon?: React.ReactNode;
   iconPosition?: 'left' | 'right';
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   textStyle?: TextStyle;
-  enableSound?: boolean;
   enableHaptics?: boolean;
 }
 
@@ -43,13 +42,11 @@ export const Button: React.FC<ButtonProps> = ({
   iconPosition = 'left',
   style,
   textStyle,
-  enableSound = true,
   enableHaptics = true,
 }) => {
   const handlePress = () => {
     if (disabled || loading) return;
     if (enableHaptics) haptic.light();
-    if (enableSound) sound.playTap();
     onPress();
   };
 

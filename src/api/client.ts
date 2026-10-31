@@ -1,170 +1,135 @@
 import { Platform } from 'react-native';
 import { env } from '../config/env';
-import { ApiError } from './errors';
-import { tokenStorage } from './tokenStorage';
-import { endpoints } from './endpoints';
+import type { ApiErrorBody } from './types';
+import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from './tokens';
 
-type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-type Query = Record<string, string | number | boolean | null | undefined>;
+export { saveTokens, clearTokens, hasSession } from './tokens';
 
-export interface RequestOptions {
-  query?: Query;
-  body?: unknown;
-  /** Attach the bearer token (default true; harmless on public endpoints). */
-  auth?: boolean;
-  signal?: AbortSignal;
-  /** Override the default retry count (GET only). */
-  retries?: number;
-  headers?: Record<string, string>;
-}
-
-/** Called when the refresh token is rejected — the auth store logs the user out. */
-let onSessionExpired: (() => void) | null = null;
-export function setSessionExpiredHandler(handler: () => void) {
-  onSessionExpired = handler;
-}
-
-function buildUrl(path: string, query?: Query): string {
-  const base = `${env.API_BASE_URL}${env.API_PREFIX}${path}`;
-  if (!query) return base;
-  const qs = Object.entries(query)
-    .filter(([, v]) => v !== undefined && v !== null && v !== '')
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
-    .join('&');
-  return qs ? `${base}?${qs}` : base;
-}
-
-/** Pulls a human message out of FastAPI (`detail`) or our envelope (`message`). */
-function extractError(body: any): { message?: string; fieldErrors?: Record<string, string> } {
-  if (!body || typeof body !== 'object') return {};
-  if (Array.isArray(body.detail)) {
-    const fieldErrors: Record<string, string> = {};
-    body.detail.forEach((d: any) => {
-      const field = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : 'non_field';
-      fieldErrors[String(field)] = d.msg;
-    });
-    return { message: body.detail[0]?.msg, fieldErrors };
+/** Every failure is an ApiError. Branch on `code`, never on `message` (FRONTEND.md §0.6). */
+export class ApiError extends Error {
+  constructor(
+    public code: string,
+    message: string,
+    public status: number,
+    public details?: unknown,
+  ) {
+    super(message);
+    this.name = 'ApiError';
   }
-  return { message: body.message || body.detail || body.error, fieldErrors: body.errors };
 }
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** Human-readable message for anything thrown. Server messages are safe to display. */
+export function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  return 'Something went wrong. Please try again.';
+}
 
-async function rawFetch(method: Method, path: string, opts: RequestOptions, accessToken?: string) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), env.REQUEST_TIMEOUT_MS);
-  opts.signal?.addEventListener('abort', () => controller.abort());
+/** `VALIDATION_ERROR` details → `{ fieldName: message }` for inline form errors. */
+export function fieldErrors(error: unknown): Record<string, string> {
+  if (!(error instanceof ApiError) || error.code !== 'VALIDATION_ERROR' || !Array.isArray(error.details)) return {};
+  const out: Record<string, string> = {};
+  for (const d of error.details as { field?: string; message?: string }[]) {
+    if (d?.field && d.message) out[d.field] = d.message;
+  }
+  return out;
+}
 
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    'X-App-Version': env.APP_VERSION,
-    'X-Platform': Platform.OS,
-    ...opts.headers,
-  };
-  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+/** Called when the session can't be recovered; the session module logs out and shows Login. */
+let onSessionExpired: () => void = () => {};
+export function setSessionExpiredHandler(fn: () => void) {
+  onSessionExpired = fn;
+}
 
+let refreshing: Promise<boolean> | null = null;
+
+async function refreshTokens(): Promise<boolean> {
+  const refreshToken = await getRefreshToken();
+  if (!refreshToken) return false;
   try {
-    return await fetch(buildUrl(path, opts.query), {
-      method,
-      headers,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-      signal: controller.signal,
+    const res = await fetch(`${env.API_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ refreshToken }),
     });
-  } catch (e: any) {
-    if (opts.signal?.aborted) throw e;
-    if (e?.name === 'AbortError') throw new ApiError('timeout', 'The request timed out. Check your connection.');
-    throw new ApiError('network', 'No internet connection. Please try again.');
+    if (!res.ok) return false;
+    const body = await res.json();
+    await saveTokens(body.data.accessToken, body.data.refreshToken);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const SESSION_DEAD = ['AUTH_REQUIRED', 'TOKEN_INVALID', 'ACCOUNT_NOT_FOUND', 'ACCOUNT_INACTIVE'];
+
+async function request<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
+  const token = await getAccessToken();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), env.TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${env.API_URL}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/json',
+        'X-Platform': Platform.OS,
+        'X-App-Version': env.APP_VERSION,
+        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init.headers,
+      },
+    });
+  } catch {
+    throw new ApiError('NETWORK_ERROR', "Can't reach Bazaura right now. Check your connection.", 0);
   } finally {
     clearTimeout(timer);
   }
-}
 
-// Single-flight refresh: concurrent 401s share one refresh call.
-let refreshing: Promise<boolean> | null = null;
-async function refreshTokens(): Promise<boolean> {
-  if (!refreshing) {
-    refreshing = (async () => {
-      const tokens = await tokenStorage.get();
-      if (!tokens?.refreshToken) return false;
-      try {
-        const res = await rawFetch('POST', endpoints.auth.refresh, {
-          body: { refresh_token: tokens.refreshToken },
-        });
-        if (!res.ok) return false;
-        const json = await res.json();
-        const data = json?.data ?? json;
-        await tokenStorage.set({ accessToken: data.access_token, refreshToken: data.refresh_token });
-        return true;
-      } catch {
-        return false;
-      }
-    })().finally(() => {
-      setTimeout(() => (refreshing = null), 0);
-    });
+  const body = await res.json().catch(() => null);
+
+  if (res.status === 401 && body?.error?.code === 'TOKEN_EXPIRED' && !retried) {
+    refreshing ??= refreshTokens().finally(() => (refreshing = null));
+    if (await refreshing) return request<T>(path, init, true);
+    await clearTokens();
+    onSessionExpired();
+  } else if (token && SESSION_DEAD.includes(body?.error?.code)) {
+    await clearTokens();
+    onSessionExpired();
   }
-  return refreshing;
-}
 
-async function request<T>(method: Method, path: string, opts: RequestOptions = {}): Promise<T> {
-  const useAuth = opts.auth !== false;
-  const maxRetries = method === 'GET' ? opts.retries ?? env.GET_RETRIES : 0;
-
-  let attempt = 0;
-  let didRefresh = false;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const token = useAuth ? (await tokenStorage.get())?.accessToken : undefined;
-    let res: Response;
-    try {
-      res = await rawFetch(method, path, opts, token);
-    } catch (e) {
-      if (e instanceof ApiError && (e.kind === 'network' || e.kind === 'timeout') && attempt < maxRetries) {
-        attempt += 1;
-        await sleep(400 * 2 ** (attempt - 1));
-        continue;
-      }
-      throw e;
-    }
-
-    if (res.status === 401 && useAuth && token && !didRefresh) {
-      didRefresh = true;
-      if (await refreshTokens()) continue;
-      await tokenStorage.clear();
-      onSessionExpired?.();
-    }
-
-    if (res.status === 204) return undefined as T;
-
-    let body: any = null;
-    const text = await res.text();
-    if (text) {
-      try {
-        body = JSON.parse(text);
-      } catch {
-        body = null;
-      }
-    }
-
-    if (!res.ok || body?.success === false) {
-      if (res.status >= 500 && attempt < maxRetries) {
-        attempt += 1;
-        await sleep(400 * 2 ** (attempt - 1));
-        continue;
-      }
-      const { message, fieldErrors } = extractError(body);
-      throw ApiError.fromStatus(res.ok ? 400 : res.status, message, fieldErrors);
-    }
-
-    // Unwrap the standard `{ success, message, data }` envelope.
-    return (body && typeof body === 'object' && 'success' in body ? body.data : body) as T;
+  if (!res.ok || !body || body.success === false) {
+    const err = body as ApiErrorBody | null;
+    throw new ApiError(
+      err?.error?.code ?? 'UNKNOWN_ERROR',
+      err?.message ?? 'Something went wrong. Please try again.',
+      res.status,
+      err?.error?.details,
+    );
   }
+  return body.data as T;
 }
 
 export const http = {
-  get: <T>(path: string, opts?: RequestOptions) => request<T>('GET', path, opts),
-  post: <T>(path: string, body?: unknown, opts?: RequestOptions) => request<T>('POST', path, { ...opts, body }),
-  put: <T>(path: string, body?: unknown, opts?: RequestOptions) => request<T>('PUT', path, { ...opts, body }),
-  patch: <T>(path: string, body?: unknown, opts?: RequestOptions) => request<T>('PATCH', path, { ...opts, body }),
-  delete: <T>(path: string, opts?: RequestOptions) => request<T>('DELETE', path, opts),
+  get: <T>(path: string) => request<T>(path),
+  post: <T>(path: string, data?: unknown) =>
+    request<T>(path, { method: 'POST', body: data === undefined ? undefined : JSON.stringify(data) }),
+  patch: <T>(path: string, data: unknown) => request<T>(path, { method: 'PATCH', body: JSON.stringify(data) }),
+  put: <T>(path: string) => request<T>(path, { method: 'PUT' }),
+  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 };
+
+type QueryValue = string | number | boolean | string[] | null | undefined;
+
+/** Builds a query string, repeating array params (?size=M&size=L) and skipping empty values. */
+export function qs(params: Record<string, QueryValue>) {
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '' || value === false) continue;
+    const add = (v: string | number | boolean) => parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(v))}`);
+    if (Array.isArray(value)) value.forEach(add);
+    else add(value);
+  }
+  return parts.length ? `?${parts.join('&')}` : '';
+}

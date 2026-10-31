@@ -1,30 +1,25 @@
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
-import { AppState, Platform } from 'react-native';
-import NetInfo from '@react-native-community/netinfo';
-import { ApiError } from '../api/errors';
+import { AppState } from 'react-native';
+import { ApiError } from '../api/client';
+import { netInfo } from '../utils/netinfo';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // Catalog data is fine to show from cache for a minute; screens feel instant
-      // when navigating back and forth, and refetches happen in the background.
-      staleTime: 60 * 1000,
-      gcTime: 10 * 60 * 1000,
-      // The HTTP client already retries network errors; only retry 5xx here.
-      retry: (failureCount, error) =>
-        failureCount < 1 && error instanceof ApiError && error.kind === 'server',
-      refetchOnWindowFocus: true,
+      staleTime: 60_000,
+      gcTime: 10 * 60_000,
+      // FRONTEND.md §8: retry network/5xx reads twice, never retry 4xx.
+      retry: (count, err) => (!(err instanceof ApiError) || err.status >= 500 || err.status === 0 ? count < 2 : false),
     },
+    // Never auto-retry orders, cancels etc.
     mutations: { retry: false },
   },
 });
 
-// Pause queries while offline and refetch when the connection comes back.
+// Pause queries offline; refetch when the connection returns.
 onlineManager.setEventListener((setOnline) =>
-  NetInfo.addEventListener((state) => setOnline(state.isConnected !== false)),
+  netInfo.addEventListener((state) => setOnline(state.isConnected !== false)),
 );
 
-// Treat "app returned to foreground" as window focus so stale data refreshes.
-AppState.addEventListener('change', (status) => {
-  if (Platform.OS !== 'web') focusManager.setFocused(status === 'active');
-});
+// Refetch stale data when the app comes back to the foreground (§9).
+AppState.addEventListener('change', (status) => focusManager.setFocused(status === 'active'));

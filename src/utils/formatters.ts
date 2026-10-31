@@ -1,57 +1,33 @@
-/**
- * Formats a number into Pakistani Rupee currency string (e.g., Rs. 2,499)
- */
-export function formatPKR(amount: number | undefined | null): string {
-  if (amount === undefined || amount === null || isNaN(amount)) {
-    return 'Rs. 0';
-  }
-  return `Rs. ${Math.round(amount).toLocaleString('en-PK')}`;
+/** Rs. 3,499 — whole rupees, grouped in thousands (FRONTEND.md §1). */
+export function formatPKR(amount: number | null | undefined): string {
+  const n = Math.round(Number(amount) || 0);
+  return `Rs. ${n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 }
 
-/**
- * Calculates percentage discount between original price and current price
- */
-export function calculateDiscount(originalPrice?: number, currentPrice?: number): number {
-  if (!originalPrice || !currentPrice || originalPrice <= currentPrice) return 0;
-  return Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "31 Oct 2026" in the phone's local time. */
+export function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-/**
- * Formats standard Pakistani phone number for display (e.g., 0300 1234567)
- */
-export function formatPakistaniPhone(phone: string): string {
-  const cleaned = phone.replace(/\D/g, '');
-  if (cleaned.startsWith('92') && cleaned.length === 12) {
-    return `+92 ${cleaned.slice(2, 5)} ${cleaned.slice(5)}`;
-  }
-  if (cleaned.startsWith('0') && cleaned.length === 11) {
-    return `${cleaned.slice(0, 4)} ${cleaned.slice(4)}`;
-  }
-  return phone;
+/** "31 Oct, 2:15 PM" in the phone's local time. */
+export function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const h = d.getHours();
+  const m = d.getMinutes().toString().padStart(2, '0');
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}, ${h % 12 || 12}:${m} ${h < 12 ? 'AM' : 'PM'}`;
 }
 
-/**
- * Returns formatted date string (e.g., 27 Aug 2026, 04:30 PM)
- */
-export function formatDateTime(isoString: string): string {
-  try {
-    const date = new Date(isoString);
-    return date.toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
-  } catch {
-    return isoString;
-  }
-}
-
-/**
- * Generates unique ID with prefix
- */
-export function generateId(prefix = 'id'): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+/** +923001234567 → 0300 1234567 for display. */
+export function formatPhone(phone: string | null | undefined): string {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  const local = digits.startsWith('92') ? `0${digits.slice(2)}` : digits;
+  return local.length === 11 ? `${local.slice(0, 4)} ${local.slice(4)}` : phone;
 }
