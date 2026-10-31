@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Image, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +13,7 @@ import { useCancelOrder, useOrder } from '../../api/hooks';
 import { errorMessage } from '../../api/client';
 import type { RootStackParamList } from '../../types/navigation';
 import { formatDateTime, formatPKR, formatPhone } from '../../utils/formatters';
-import { optimizeImageUrl } from '../../utils/images';
+import { RemoteImage } from '../../components/common/RemoteImage';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii } from '../../theme/spacing';
@@ -87,7 +87,7 @@ export const OrderDetailScreen: React.FC = () => {
               onPress={() => item.productSlug && navigation.navigate('ProductDetail', { slug: item.productSlug })}
               style={styles.item}
             >
-              {item.imageUrl ? <Image source={{ uri: optimizeImageUrl(item.imageUrl, 56) }} style={styles.thumb} /> : <View style={styles.thumb} />}
+              <RemoteImage uri={item.imageUrl} width={56} style={styles.thumb} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.itemTitle} numberOfLines={2}>
                   {item.title}

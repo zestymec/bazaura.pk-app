@@ -45,6 +45,8 @@
 #import "RNHapticFeedbackSpecJSI.h"
 #import "RNImagePickerSpec/RNImagePickerSpec.h"
 #import "RNImagePickerSpecJSI.h"
+#import "RNKeychainSpec/RNKeychainSpec.h"
+#import "RNKeychainSpecJSI.h"
 #import "rnscreens/rnscreens.h"
 #import "rnscreensJSI.h"
 #import "rnsvg/rnsvg.h"

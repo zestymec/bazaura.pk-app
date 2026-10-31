@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,7 +16,7 @@ import { MAX_QTY, useCartStore } from '../../store/cart';
 import { useRequireLogin } from '../../hooks/useRequireLogin';
 import type { RootStackParamList } from '../../types/navigation';
 import { formatPKR } from '../../utils/formatters';
-import { optimizeImageUrl } from '../../utils/images';
+import { RemoteImage } from '../../components/common/RemoteImage';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii } from '../../theme/spacing';
@@ -131,7 +131,7 @@ export const CartScreen: React.FC = () => {
                 onPress={() => snap?.productSlug && navigation.navigate('ProductDetail', { slug: snap.productSlug })}
                 style={styles.thumbWrap}
               >
-                {snap?.imageUrl ? <Image source={{ uri: optimizeImageUrl(snap.imageUrl, 84) }} style={styles.thumb} /> : <View style={styles.thumb} />}
+                <RemoteImage uri={snap?.imageUrl} width={84} style={styles.thumb} />
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
                 <Text style={styles.lineTitle} numberOfLines={2}>

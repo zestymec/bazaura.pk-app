@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,7 +9,7 @@ import { ProductListView } from '../../components/catalog/ProductListView';
 import { useCategories } from '../../api/hooks';
 import type { CategoryNode } from '../../api/types';
 import type { MainTabParamList, RootStackParamList } from '../../types/navigation';
-import { optimizeImageUrl } from '../../utils/images';
+import { RemoteImage, Shade } from '../../components/common/RemoteImage';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii } from '../../theme/spacing';
@@ -47,7 +47,8 @@ export const ShopScreen: React.FC = () => {
               .sort((a, b) => a.displayOrder - b.displayOrder)
               .map((c) => (
                 <TouchableOpacity key={c.id} activeOpacity={0.85} onPress={() => open(c)} style={[styles.tile, { width: tile, height: tile * 0.7 }]}>
-                  {c.imageUrl && <Image source={{ uri: optimizeImageUrl(c.imageUrl, tile) }} style={StyleSheet.absoluteFill} />}
+                  <RemoteImage uri={c.imageUrl} width={tile} style={StyleSheet.absoluteFill} />
+                  <Shade from={0.7} to={0} />
                   <View style={styles.tileShade}>
                     <Text style={styles.tileText}>{c.name}</Text>
                   </View>
@@ -76,6 +77,6 @@ const styles = StyleSheet.create({
   all: { fontSize: 13, fontWeight: typography.weight.bold, color: colors.primary[500] },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   tile: { borderRadius: radii.xl, overflow: 'hidden', backgroundColor: colors.neutral[800] },
-  tileShade: { flex: 1, justifyContent: 'flex-end', padding: 12, backgroundColor: 'rgba(0,0,0,0.25)' },
-  tileText: { color: colors.neutral.white, fontSize: 16, fontWeight: typography.weight.bold },
+  tileShade: { flex: 1, justifyContent: 'flex-end', padding: 14 },
+  tileText: { color: colors.neutral.white, fontSize: 17, fontWeight: typography.weight.bold },
 });

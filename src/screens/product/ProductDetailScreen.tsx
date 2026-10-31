@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
-  Image,
   Linking,
   ScrollView,
   Share,
@@ -27,7 +26,7 @@ import { MAX_QTY, useCartStore } from '../../store/cart';
 import { useRequireLogin } from '../../hooks/useRequireLogin';
 import type { RootStackParamList } from '../../types/navigation';
 import { formatDate } from '../../utils/formatters';
-import { optimizeImageUrl } from '../../utils/images';
+import { RemoteImage } from '../../components/common/RemoteImage';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii } from '../../theme/spacing';
@@ -146,7 +145,7 @@ export const ProductDetailScreen: React.FC = () => {
             showsHorizontalScrollIndicator={false}
             onMomentumScrollEnd={(e) => setImageIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
             renderItem={({ item }) => (
-              <Image source={{ uri: optimizeImageUrl(item, width, 80) }} style={{ width, height: width * 1.2 }} resizeMode="cover" />
+              <RemoteImage uri={item} width={width} quality={80} style={{ width, height: width * 1.2 }} />
             )}
             initialScrollIndex={0}
             getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}

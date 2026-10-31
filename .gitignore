@@ -47,3 +47,7 @@ ios/build/
 android/app/build/
 android/build/
 android/.gradle/
+ios/Pods/
+xcuserdata/
+*.xcuserstate
+.xcode.env.local

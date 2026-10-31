@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from './AppText';
 import { Price } from './ui';
 import { Heart, Star, Zap } from '../icons';
@@ -10,7 +10,7 @@ import { useRequireLogin } from '../../hooks/useRequireLogin';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii } from '../../theme/spacing';
-import { optimizeImageUrl } from '../../utils/images';
+import { RemoteImage } from './RemoteImage';
 
 interface Props {
   product: ProductCardData;
@@ -34,14 +34,7 @@ export const ProductCard: React.FC<Props> = React.memo(({ product, width, onPres
   return (
     <TouchableOpacity activeOpacity={0.85} onPress={() => onPress(product)} style={{ width }}>
       <View style={[styles.imageWrap, { height: width * 1.25 }]}>
-        {product.primaryImage ? (
-          <Image
-            source={{ uri: optimizeImageUrl(product.primaryImage, width) }}
-            style={StyleSheet.absoluteFill}
-            resizeMode="cover"
-            fadeDuration={120}
-          />
-        ) : null}
+        <RemoteImage uri={product.primaryImage} width={width} style={StyleSheet.absoluteFill} />
         {!product.inStock && (
           <View style={styles.soldOut}>
             <Text style={styles.soldOutText}>Sold out</Text>
@@ -90,10 +83,10 @@ export const ProductCard: React.FC<Props> = React.memo(({ product, width, onPres
 
 const styles = StyleSheet.create({
   imageWrap: {
-    borderRadius: radii.lg,
+    borderRadius: radii.xl,
     overflow: 'hidden',
     backgroundColor: colors.neutral[100],
-    marginBottom: 8,
+    marginBottom: 10,
   },
   soldOut: {
     ...StyleSheet.absoluteFillObject,
@@ -136,7 +129,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
   },
   expressText: { fontSize: 10.5, fontWeight: typography.weight.bold, color: colors.primary[700] },
-  title: { fontSize: 13.5, fontWeight: typography.weight.semibold, color: colors.neutral[800], lineHeight: 18, marginBottom: 4 },
+  title: { fontSize: 13.5, fontWeight: typography.weight.semibold, color: colors.neutral[900], lineHeight: 18, marginBottom: 4 },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
   ratingText: { fontSize: 11.5, fontWeight: typography.weight.bold, color: colors.neutral[700] },
   ratingCount: { fontWeight: typography.weight.regular, color: colors.neutral[400] },

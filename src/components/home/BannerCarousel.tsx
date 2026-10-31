@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
   FlatList,
-  Image,
   ListRenderItemInfo,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -16,7 +15,7 @@ import type { ContentBlockOut } from '../../api/types';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii } from '../../theme/spacing';
-import { optimizeImageUrl } from '../../utils/images';
+import { RemoteImage, Shade } from '../common/RemoteImage';
 
 export const BannerCarousel: React.FC<{ banners: ContentBlockOut[]; onPress: (b: ContentBlockOut) => void }> = React.memo(
   ({ banners, onPress }) => {
@@ -32,7 +31,8 @@ export const BannerCarousel: React.FC<{ banners: ContentBlockOut[]; onPress: (b:
     const renderItem = useCallback(
       ({ item }: ListRenderItemInfo<ContentBlockOut>) => (
         <TouchableOpacity activeOpacity={0.92} onPress={() => onPress(item)} style={[styles.card, { width: cardWidth }]}>
-          <Image source={{ uri: optimizeImageUrl(item.mobileImageUrl ?? item.imageUrl, cardWidth) }} style={StyleSheet.absoluteFill} />
+          <RemoteImage uri={item.mobileImageUrl ?? item.imageUrl} width={cardWidth} quality={75} style={StyleSheet.absoluteFill} />
+          <Shade from={0.85} to={0.05} />
           <View style={styles.overlay}>
             {!!item.tag && <Text style={styles.tag}>{item.tag}</Text>}
             <Text style={styles.title} numberOfLines={2}>
@@ -84,10 +84,10 @@ export const BannerCarousel: React.FC<{ banners: ContentBlockOut[]; onPress: (b:
 
 const styles = StyleSheet.create({
   list: { paddingHorizontal: 16 },
-  card: { height: 190, borderRadius: radii['2xl'], overflow: 'hidden', backgroundColor: colors.neutral[800] },
-  overlay: { flex: 1, padding: 18, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.28)' },
-  tag: { color: colors.neutral.white, fontSize: 11, fontWeight: typography.weight.extrabold, letterSpacing: 1, marginBottom: 6 },
-  title: { color: colors.neutral.white, fontSize: 22, fontWeight: typography.weight.bold, lineHeight: 27 },
+  card: { height: 220, borderRadius: radii['2xl'], overflow: 'hidden', backgroundColor: colors.neutral[800] },
+  overlay: { flex: 1, padding: 20, justifyContent: 'flex-end' },
+  tag: { alignSelf: 'flex-start', overflow: 'hidden', backgroundColor: colors.primary[500], paddingHorizontal: 8, paddingVertical: 3, borderRadius: radii.full, color: colors.neutral.white, fontSize: 10.5, fontWeight: typography.weight.extrabold, letterSpacing: 1, marginBottom: 6 },
+  title: { color: colors.neutral.white, fontSize: 24, fontWeight: typography.weight.bold, lineHeight: 29 },
   subtitle: { color: 'rgba(255,255,255,0.9)', fontSize: 13, marginTop: 4, lineHeight: 18 },
   cta: {
     flexDirection: 'row',

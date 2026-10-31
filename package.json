@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "android": "react-native run-android",
-    "ios": "react-native run-ios",
+    "ios": "react-native run-ios --simulator \"iPhone 16 Pro\"",
+    "ios:device": "react-native run-ios --device",
     "start": "react-native start",
     "check-types": "tsc --noEmit",
     "clean:android": "cd android && ./gradlew clean && cd ..",

@@ -15,13 +15,14 @@ import { useCartStore, selectCartCount } from '../../store/cart';
 import type { RootStackParamList } from '../../types/navigation';
 import { openContentTarget } from '../../utils/contentTarget';
 import { formatPKR } from '../../utils/formatters';
-import { optimizeImageUrl } from '../../utils/images';
+import { RemoteImage, Shade } from '../../components/common/RemoteImage';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii } from '../../theme/spacing';
 
 const MARK = require('../../../assets/brand/mark.png');
 const WORDMARK = require('../../../assets/brand/wordmark.png');
+const CAT_W = 112;
 
 export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -122,7 +123,7 @@ export const HomeScreen: React.FC = () => {
                 renderItem={({ item }) => (
                   <TouchableOpacity style={styles.story} onPress={() => openBlock(item)}>
                     <View style={styles.storyRing}>
-                      <Image source={{ uri: optimizeImageUrl(item.mobileImageUrl ?? item.imageUrl, 64) }} style={styles.storyImg} />
+                      <RemoteImage uri={item.mobileImageUrl ?? item.imageUrl} width={60} style={styles.storyImg} />
                     </View>
                     <Text style={styles.storyText} numberOfLines={1}>
                       {item.title}
@@ -140,12 +141,9 @@ export const HomeScreen: React.FC = () => {
                   {[...feed.featuredCategories]
                     .sort((a, b) => a.displayOrder - b.displayOrder)
                     .map((c) => (
-                      <TouchableOpacity key={c.id} style={styles.cat} onPress={() => shop({ category: c.slug }, c.name)}>
-                        {c.imageUrl ? (
-                          <Image source={{ uri: optimizeImageUrl(c.imageUrl, 72) }} style={styles.catImg} />
-                        ) : (
-                          <View style={styles.catImg} />
-                        )}
+                      <TouchableOpacity key={c.id} activeOpacity={0.88} style={styles.cat} onPress={() => shop({ category: c.slug }, c.name)}>
+                        <RemoteImage uri={c.imageUrl} width={CAT_W} style={StyleSheet.absoluteFill} />
+                        <Shade from={0.75} to={0} />
                         <Text style={styles.catText} numberOfLines={1}>
                           {c.name}
                         </Text>
@@ -267,16 +265,15 @@ const styles = StyleSheet.create({
   perk: { flex: 1, alignItems: 'center', gap: 3, paddingHorizontal: 2 },
   perkTitle: { fontSize: 11, fontWeight: typography.weight.bold, color: colors.neutral[900] },
   perkSub: { fontSize: 10, color: colors.neutral[500] },
-  bannerSkeleton: { height: 190, marginHorizontal: 16, borderRadius: radii['2xl'] },
+  bannerSkeleton: { height: 220, marginHorizontal: 16, borderRadius: radii['2xl'] },
   stories: { paddingHorizontal: 16, paddingTop: 20, gap: 14 },
   story: { width: 68, alignItems: 'center' },
   storyRing: { width: 66, height: 66, borderRadius: 33, borderWidth: 2, borderColor: colors.primary[500], padding: 3 },
-  storyImg: { flex: 1, borderRadius: 30, backgroundColor: colors.neutral[100] },
+  storyImg: { flex: 1, borderRadius: 30 },
   storyText: { fontSize: 11.5, fontWeight: typography.weight.semibold, color: colors.neutral[700], marginTop: 6 },
   cats: { paddingHorizontal: 16, gap: 12 },
-  cat: { width: 76, alignItems: 'center' },
-  catImg: { width: 72, height: 72, borderRadius: radii.xl, backgroundColor: colors.neutral[100] },
-  catText: { fontSize: 12, fontWeight: typography.weight.semibold, color: colors.neutral[800], marginTop: 6 },
+  cat: { width: CAT_W, height: CAT_W * 1.3, borderRadius: radii.xl, overflow: 'hidden', justifyContent: 'flex-end', padding: 10, backgroundColor: colors.neutral[100] },
+  catText: { fontSize: 14, fontWeight: typography.weight.bold, color: colors.neutral.white },
   railSkeleton: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, marginTop: 24 },
   cards: { paddingHorizontal: 16, marginTop: 28, gap: 10 },
   actionCard: {

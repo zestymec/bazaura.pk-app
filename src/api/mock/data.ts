@@ -22,16 +22,40 @@ export const MOCK_VOUCHERS = [
   { code: 'WELCOME10', description: '10% off orders over Rs. 2,000', percent: 10, minSubtotal: 2000, maxDiscount: 1000 },
 ];
 
-const img = (label: string, bg: string, fg = 'FFFFFF') =>
-  `https://placehold.co/600x750/${bg}/${fg}/png?text=${encodeURIComponent(label)}&font=poppins`;
+/** Demo photos (Unsplash CDN). Real images come from the backend's media URLs. */
+const photo = (id: string) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop`;
 
-const cat = (id: string, name: string, slug: string, parentId: string | null, order: number, bg: string): CategoryNode => ({
+const CATEGORY_PHOTOS: Record<string, string> = {
+  cat_men: photo('1617137968427-85924c800a22'),
+  cat_hoodies: photo('1556821840-3a63f95609a7'),
+  cat_jackets: photo('1551028719-00167b16eac5'),
+  cat_shirts: photo('1596755094514-f87e34085b2c'),
+  cat_tshirts: photo('1521572163474-6864f9cf17ab'),
+  cat_trousers: photo('1544441893-675973e31985'),
+  cat_tracksuits: photo('1620799140408-edc6dcb6d633'),
+};
+
+/** Product photos — one per colour, in the same order as the seed's colours. */
+const PRODUCT_PHOTOS: Record<string, string[]> = {
+  'essential-hoodie': ['1556821840-3a63f95609a7', '1620799140408-edc6dcb6d633'],
+  'zip-hoodie': ['1620799140408-edc6dcb6d633', '1556821840-3a63f95609a7'],
+  'puffer-jacket': ['1591047139829-d91aecb6caea', '1551028719-00167b16eac5'],
+  'denim-jacket': ['1611312449408-fcece27cdbb7'],
+  'oxford-shirt': ['1602810318383-e386cc2a3ccf', '1596755094514-f87e34085b2c'],
+  'flannel-shirt': ['1588359348347-9bc6cbbb689e', '1596755094514-f87e34085b2c'],
+  'basic-tee': ['1583743814966-8936f5b7be1a', '1521572163474-6864f9cf17ab', '1576566588028-4147f3842f27'],
+  'graphic-tee': ['1618354691373-d851c5c3a990', '1503342217505-b0a15ec3261c'],
+  'chino-trouser': ['1544441893-675973e31985', '1624378439575-d8705ad7ae80', '1542272604-787c3835535d'],
+  'fleece-tracksuit': ['1556821840-3a63f95609a7', '1620799140408-edc6dcb6d633'],
+};
+
+const cat = (id: string, name: string, slug: string, parentId: string | null, order: number): CategoryNode => ({
   id,
   name,
   slug,
   parentId,
   description: null,
-  imageUrl: img(' ', bg, bg),
+  imageUrl: CATEGORY_PHOTOS[id] ?? null,
   iconName: null,
   isFeatured: parentId !== null,
   displayOrder: order,
@@ -39,15 +63,15 @@ const cat = (id: string, name: string, slug: string, parentId: string | null, or
 });
 
 const CHILDREN: CategoryNode[] = [
-  cat('cat_hoodies', 'Hoodies', 'men-hoodies', 'cat_men', 1, '292524'),
-  cat('cat_jackets', 'Jackets', 'men-jackets', 'cat_men', 2, '44403C'),
-  cat('cat_shirts', 'Shirts', 'men-shirts', 'cat_men', 3, '1E3A5F'),
-  cat('cat_tshirts', 'T-Shirts', 'men-t-shirts', 'cat_men', 4, 'FF5722'),
-  cat('cat_trousers', 'Trousers', 'men-trousers', 'cat_men', 5, '57534E'),
-  cat('cat_tracksuits', 'Tracksuits', 'men-tracksuits', 'cat_men', 6, '0F172A'),
+  cat('cat_hoodies', 'Hoodies', 'men-hoodies', 'cat_men', 1),
+  cat('cat_jackets', 'Jackets', 'men-jackets', 'cat_men', 2),
+  cat('cat_shirts', 'Shirts', 'men-shirts', 'cat_men', 3),
+  cat('cat_tshirts', 'T-Shirts', 'men-t-shirts', 'cat_men', 4),
+  cat('cat_trousers', 'Trousers', 'men-trousers', 'cat_men', 5),
+  cat('cat_tracksuits', 'Tracksuits', 'men-tracksuits', 'cat_men', 6),
 ];
 
-export const MOCK_CATEGORIES: CategoryNode[] = [{ ...cat('cat_men', 'Men', 'men', null, 1, '1C1917'), children: CHILDREN }];
+export const MOCK_CATEGORIES: CategoryNode[] = [{ ...cat('cat_men', 'Men', 'men', null, 1), children: CHILDREN }];
 
 export const ALL_CATEGORIES: CategoryNode[] = [MOCK_CATEGORIES[0], ...CHILDREN];
 
@@ -133,7 +157,8 @@ function toDetail(s: Seed, idx: number): ProductDetail {
   const category = byId(s.cat);
   const vs = variants(s.key, s.price, s.colors, s.sizes, s.soldOut, s.low);
   const first = s.colors[0];
-  const images = s.colors.map((c) => img(s.title.split(' ').slice(-1)[0], c.hex === 'F5F5F4' ? 'E7E5E4' : c.hex, c.hex === 'F5F5F4' ? '1C1917' : 'FFFFFF'));
+  const ids = PRODUCT_PHOTOS[s.key];
+  const images = s.colors.map((_, i) => photo(ids[i % ids.length]));
   const discountPercent = s.compareAt ? Math.round(((s.compareAt - s.price) / s.compareAt) * 100) : null;
   return {
     id: `prd_${(idx + 1).toString().padStart(3, '0')}`,
@@ -181,7 +206,7 @@ export const MOCK_CONTENT: ContentBlockOut[] = [
     title: 'Winter Drop is here',
     subtitle: 'Hoodies, puffers and tracksuits — up to 25% off.',
     tag: 'NEW SEASON',
-    imageUrl: img(' ', 'C2410C', 'C2410C'),
+    imageUrl: photo('1490481651871-ab68de25d43d'),
     mobileImageUrl: null,
     ctaText: 'Shop winter',
     targetType: 'COLLECTION',
@@ -194,7 +219,7 @@ export const MOCK_CONTENT: ContentBlockOut[] = [
     title: 'Send a gift anywhere in Pakistan',
     subtitle: 'Gift-wrapped, with your message. We handle the rest.',
     tag: 'GIFTING',
-    imageUrl: img(' ', '292524', '292524'),
+    imageUrl: photo('1549465220-1a8b9238cd48'),
     mobileImageUrl: null,
     ctaText: 'Send a gift',
     targetType: 'CUSTOM_REQUEST',
