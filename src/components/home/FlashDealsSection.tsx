@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   FlatList,
+  ListRenderItemInfo,
 } from 'react-native';
+import { Text } from '../common/AppText';
 import { Flame, Clock, ChevronRight } from 'lucide-react-native';
 import { Product } from '../../types/product';
 import { ProductCard } from '../common/ProductCard';
@@ -16,35 +17,55 @@ import { haptic } from '../../utils/haptics';
 
 interface FlashDealsSectionProps {
   products: Product[];
+  /** Seconds until the deal window closes (from GET /products/flash-deals). */
+  countdownSeconds?: number;
   onProductPress: (product: Product) => void;
   onSeeAllPress?: () => void;
 }
 
-export const FlashDealsSection: React.FC<FlashDealsSectionProps> = ({
-  products,
-  onProductPress,
-  onSeeAllPress,
-}) => {
-  const [timeLeft, setTimeLeft] = useState({ hours: 3, minutes: 42, seconds: 18 });
+const pad = (num: number) => num.toString().padStart(2, '0');
+
+/**
+ * Ticks once a second. Kept as its own component so only this label
+ * re-renders — not the whole rail of product cards.
+ */
+const Countdown: React.FC<{ seconds: number }> = React.memo(({ seconds }) => {
+  const [endsAt] = useState(() => Date.now() + seconds * 1000);
+  const [left, setLeft] = useState(seconds);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev.seconds > 0) {
-          return { ...prev, seconds: prev.seconds - 1 };
-        } else if (prev.minutes > 0) {
-          return { ...prev, minutes: 59, seconds: 59 };
-        } else if (prev.hours > 0) {
-          return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
-        }
-        return { hours: 5, minutes: 0, seconds: 0 };
-      });
+      setLeft(Math.max(0, Math.round((endsAt - Date.now()) / 1000)));
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [endsAt]);
 
-  const formatDigit = (num: number) => num.toString().padStart(2, '0');
-  const flashProducts = products.filter((p) => (p.discountPercent || 0) >= 10);
+  const h = Math.floor(left / 3600);
+  const m = Math.floor((left % 3600) / 60);
+  const sec = left % 60;
+  return (
+    <Text style={styles.timerText}>
+      {pad(h)}:{pad(m)}:{pad(sec)}
+    </Text>
+  );
+});
+
+export const FlashDealsSection: React.FC<FlashDealsSectionProps> = React.memo(({
+  products,
+  countdownSeconds = 4 * 3600,
+  onProductPress,
+  onSeeAllPress,
+}) => {
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<Product>) => (
+      <View style={styles.cardWrapper}>
+        <ProductCard product={item} cardWidth={150} onPress={onProductPress} />
+      </View>
+    ),
+    [onProductPress],
+  );
+
+  if (products.length === 0) return null;
 
   return (
     <View style={styles.container}>
@@ -56,9 +77,7 @@ export const FlashDealsSection: React.FC<FlashDealsSectionProps> = ({
           {/* Clean Minimalist Timer Badge */}
           <View style={styles.timerBadge}>
             <Clock size={11} color={colors.neutral[600]} />
-            <Text style={styles.timerText}>
-              {formatDigit(timeLeft.hours)}:{formatDigit(timeLeft.minutes)}:{formatDigit(timeLeft.seconds)}
-            </Text>
+            <Countdown key={countdownSeconds} seconds={countdownSeconds} />
           </View>
         </View>
 
@@ -79,24 +98,18 @@ export const FlashDealsSection: React.FC<FlashDealsSectionProps> = ({
 
       {/* Horizontal Flash Deal Products */}
       <FlatList
-        data={flashProducts}
+        data={products}
         keyExtractor={(item) => `flash_${item.id}`}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (
-          <View style={styles.cardWrapper}>
-            <ProductCard
-              product={item}
-              cardWidth={150}
-              onPress={() => onProductPress(item)}
-            />
-          </View>
-        )}
+        initialNumToRender={3}
+        windowSize={3}
+        renderItem={renderItem}
       />
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

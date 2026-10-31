@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Image,
   Dimensions,
   FlatList,
-  Alert,
+  Share,
 } from 'react-native';
+import { Text } from '../../components/common/AppText';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,7 +27,8 @@ import {
 } from 'lucide-react-native';
 import { Button } from '../../components/common/Button';
 import { LAHORE_DELIVERY_ZONES } from '../../data/lahoreAreas';
-import { Product } from '../../types/product';
+import { useProduct } from '../../hooks/queries';
+import { optimizeImageUrl } from '../../utils/images';
 import { RootStackParamList } from '../../types/navigation';
 import { useCartStore } from '../../store/useCartStore';
 import { useWishlistStore } from '../../store/useWishlistStore';
@@ -46,10 +47,12 @@ export const ProductDetailScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<ProductDetailRouteProp>();
   const insets = useSafeAreaInsets();
-  const product = route.params.product;
+  // Paint instantly from the list item, then swap in the full record (reviews, specs, stock).
+  const { data: product } = useProduct(route.params.product);
 
-  const { addItem } = useCartStore();
-  const { isInWishlist, toggleWishlist } = useWishlistStore();
+  const addItem = useCartStore((s) => s.addItem);
+  const toggleWishlist = useWishlistStore((s) => s.toggleWishlist);
+  const isFavorite = useWishlistStore((s) => s.wishlistIds.includes(product.id));
 
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>(() => {
@@ -64,7 +67,8 @@ export const ProductDetailScreen: React.FC = () => {
   const [quantity, setQuantity] = useState(1);
   const [selectedLahoreArea, setSelectedLahoreArea] = useState(LAHORE_DELIVERY_ZONES[0]);
 
-  const isFavorite = isInWishlist(product.id);
+  const maxQty = Math.max(1, Math.min(product.stockCount || 10, 10));
+  const canBuy = product.inStock;
 
   const handleSelectVariant = (variantName: string, optionValue: string) => {
     haptic.selection();
@@ -72,12 +76,24 @@ export const ProductDetailScreen: React.FC = () => {
   };
 
   const handleAddToCart = () => {
+    if (!canBuy) return;
     addItem(product, quantity, selectedVariants);
   };
 
   const handleBuyNow = () => {
+    if (!canBuy) return;
     addItem(product, quantity, selectedVariants);
     navigation.navigate('MainTabs', { screen: 'CartTab' });
+  };
+
+  const handleShare = () => {
+    haptic.light();
+    const url = `https://bazaura.pk/p/${product.id}`;
+    Share.share({
+      message: `${product.title} — ${formatPKR(product.price)} on Bazaura\n${url}`,
+      url,
+      title: product.title,
+    }).catch(() => {});
   };
 
   return (
@@ -107,11 +123,9 @@ export const ProductDetailScreen: React.FC = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => {
-              haptic.light();
-              Alert.alert('Share Product', `Share "${product.title}" with friends on WhatsApp!`);
-            }}
+            onPress={handleShare}
             style={styles.navCircleBtn}
+            accessibilityLabel="Share product"
           >
             <Share2 size={18} color={colors.neutral[800]} />
           </TouchableOpacity>
@@ -135,7 +149,11 @@ export const ProductDetailScreen: React.FC = () => {
               setActiveImageIdx(idx);
             }}
             renderItem={({ item }) => (
-              <Image source={{ uri: item }} style={styles.carouselImage} resizeMode="cover" />
+              <Image
+                source={{ uri: optimizeImageUrl(item, SCREEN_WIDTH, 80) }}
+                style={styles.carouselImage}
+                resizeMode="cover"
+              />
             )}
           />
 
@@ -263,11 +281,60 @@ export const ProductDetailScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>Overview</Text>
             <Text style={styles.descriptionText}>{product.description}</Text>
           </View>
+
+          {/* Specifications */}
+          {product.specifications && Object.keys(product.specifications).length > 0 && (
+            <View style={styles.sectionBox}>
+              <Text style={styles.sectionTitle}>Specifications</Text>
+              {Object.entries(product.specifications).map(([key, value], idx) => (
+                <View key={key} style={[styles.specRow, idx > 0 && styles.specRowBorder]}>
+                  <Text style={styles.specKey}>{key}</Text>
+                  <Text style={styles.specValue}>{value}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Reviews */}
+          {product.reviews && product.reviews.length > 0 && (
+            <View style={styles.sectionBox}>
+              <View style={styles.reviewsHeader}>
+                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Customer Reviews</Text>
+                <View style={styles.ratingBadge}>
+                  <Star size={12} color="#F59E0B" fill="#F59E0B" />
+                  <Text style={styles.ratingScore}>{product.rating.toFixed(1)}</Text>
+                  <Text style={styles.ratingCount}>({product.reviewCount})</Text>
+                </View>
+              </View>
+              {product.reviews.slice(0, 5).map((review) => (
+                <View key={review.id} style={styles.reviewItem}>
+                  <View style={styles.reviewTop}>
+                    <Text style={styles.reviewName}>{review.userName}</Text>
+                    <View style={styles.reviewStars}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <Star
+                          key={n}
+                          size={10}
+                          color="#F59E0B"
+                          fill={n <= Math.round(review.rating) ? '#F59E0B' : 'transparent'}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                  <Text style={styles.reviewMeta}>
+                    {review.cityName} · {review.date}
+                    {review.verifiedPurchase ? ' · Verified purchase' : ''}
+                  </Text>
+                  <Text style={styles.reviewComment}>{review.comment}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
 
       {/* Sticky Bottom Action Bar */}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         <View style={styles.qtyBox}>
           <TouchableOpacity
             onPress={() => {
@@ -283,8 +350,10 @@ export const ProductDetailScreen: React.FC = () => {
           <Text style={styles.qtyText}>{quantity}</Text>
           <TouchableOpacity
             onPress={() => {
-              haptic.light();
-              setQuantity(quantity + 1);
+              if (quantity < maxQty) {
+                haptic.light();
+                setQuantity(quantity + 1);
+              }
             }}
             style={styles.qtyBtn}
           >
@@ -293,7 +362,8 @@ export const ProductDetailScreen: React.FC = () => {
         </View>
 
         <Button
-          title="Add to Bag"
+          title={canBuy ? 'Add to Bag' : 'Sold Out'}
+          disabled={!canBuy}
           onPress={handleAddToCart}
           size="md"
           variant="secondary"
@@ -303,6 +373,7 @@ export const ProductDetailScreen: React.FC = () => {
 
         <Button
           title="Buy Now"
+          disabled={!canBuy}
           onPress={handleBuyNow}
           size="md"
           variant="primary"
@@ -343,7 +414,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   scrollContent: {
-    paddingBottom: 90,
+    paddingBottom: 130,
   },
   carouselWrapper: {
     width: SCREEN_WIDTH,
@@ -540,9 +611,66 @@ const styles = StyleSheet.create({
     color: colors.neutral[700],
   },
   descriptionText: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.neutral[600],
-    lineHeight: 17,
+    lineHeight: 19,
+  },
+  specRow: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+    gap: 12,
+  },
+  specRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: colors.neutral[100],
+  },
+  specKey: {
+    width: 110,
+    fontSize: 12,
+    color: colors.neutral[500],
+    fontWeight: typography.weight.semibold,
+  },
+  specValue: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.neutral[900],
+    fontWeight: typography.weight.medium,
+  },
+  reviewsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  reviewItem: {
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.neutral[100],
+  },
+  reviewTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  reviewName: {
+    fontSize: 13,
+    fontWeight: typography.weight.bold,
+    color: colors.neutral[900],
+  },
+  reviewStars: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  reviewMeta: {
+    fontSize: 11,
+    color: colors.neutral[500],
+    marginTop: 2,
+  },
+  reviewComment: {
+    fontSize: 12.5,
+    color: colors.neutral[700],
+    lineHeight: 18,
+    marginTop: 6,
   },
   bottomBar: {
     position: 'absolute',

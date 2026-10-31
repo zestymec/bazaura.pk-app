@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import {
   View,
-  TextInput,
-  Text,
   StyleSheet,
   TextInputProps,
   ViewStyle,
   TextStyle,
 } from 'react-native';
+import { TextInput, Text } from './AppText';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii } from '../../theme/spacing';

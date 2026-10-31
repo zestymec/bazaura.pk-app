@@ -10,6 +10,8 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 
 class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
+    // Swap the splash theme for the real one before the first frame is drawn
+    setTheme(R.style.AppTheme)
     super.onCreate(null)
   }
 

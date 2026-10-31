@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { Text } from '../../components/common/AppText';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,6 +32,10 @@ import { typography } from '../../theme/typography';
 import { radii, shadows } from '../../theme/spacing';
 import { formatPKR } from '../../utils/formatters';
 import { haptic } from '../../utils/haptics';
+import { calculateTotals } from '../../utils/pricing';
+import { isValidPakistaniPhone } from '../../utils/validation';
+import { ordersService } from '../../api/services/orders';
+import { getErrorMessage } from '../../api/errors';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -39,77 +43,118 @@ export const CheckoutScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const insets = useSafeAreaInsets();
 
-  const { items, deliveryType, getSummary, clearCart, setDeliveryType } = useCartStore();
-  const { user, selectedAddressId, setSelectedAddress, addAddress, addOrder } = useUserStore();
+  const items = useCartStore((s) => s.items);
+  const deliveryType = useCartStore((s) => s.deliveryType);
+  const appliedVoucher = useCartStore((s) => s.appliedVoucher);
+  const setDeliveryType = useCartStore((s) => s.setDeliveryType);
+  const clearCart = useCartStore((s) => s.clearCart);
+  const summary = useMemo(
+    () => calculateTotals(items, deliveryType, appliedVoucher),
+    [items, deliveryType, appliedVoucher],
+  );
 
-  const summary = getSummary();
+  const user = useUserStore((s) => s.user);
+  const isAuthenticated = useUserStore((s) => s.isAuthenticated);
+  const selectedAddressId = useUserStore((s) => s.selectedAddressId);
+  const setSelectedAddress = useUserStore((s) => s.setSelectedAddress);
+  const addAddress = useUserStore((s) => s.addAddress);
+  const prependOrder = useUserStore((s) => s.prependOrder);
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH_ON_DELIVERY');
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-  const [showNewAddressForm, setShowNewAddressForm] = useState(false);
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+  const [showNewAddressForm, setShowNewAddressForm] = useState(user.addresses.length === 0);
 
   const [newFullName, setNewFullName] = useState(user.fullName);
   const [newPhone, setNewPhone] = useState(user.phone);
   const [newAddressLine, setNewAddressLine] = useState('');
-  const [newArea, setNewArea] = useState('Gulberg III');
-  const [newCity, setNewCity] = useState('Lahore');
+  const [newArea, setNewArea] = useState('');
+  const [newCity, setNewCity] = useState(user.selectedCity || 'Lahore');
+
+  // A session can expire while this screen is open — send the user to log in.
+  useEffect(() => {
+    if (!isAuthenticated) navigation.replace('Login', { reason: 'Log in to place your order.' });
+  }, [isAuthenticated, navigation]);
 
   const selectedAddress =
     user.addresses.find((a) => a.id === selectedAddressId) || user.addresses[0];
 
-  const handleAddNewAddress = () => {
-    if (!newAddressLine.trim() || !newPhone.trim()) {
-      Alert.alert('Required Fields', 'Please fill in the address and phone number.');
+  const handleAddNewAddress = async () => {
+    if (!newAddressLine.trim() || !newArea.trim() || !newCity.trim()) {
+      Alert.alert('Required Fields', 'Please fill in the address, area and city.');
+      return;
+    }
+    if (!isValidPakistaniPhone(newPhone)) {
+      Alert.alert('Invalid Phone', 'Please enter a valid Pakistani mobile number (e.g. 03001234567).');
       return;
     }
 
-    const created = addAddress({
-      fullName: newFullName.trim() || user.fullName,
-      phone: newPhone.trim(),
-      addressLine1: newAddressLine.trim(),
-      area: newArea.trim(),
-      city: newCity.trim(),
-      isLahore: newCity.toLowerCase() === 'lahore',
-    });
-
-    setShowNewAddressForm(false);
-    setSelectedAddress(created.id);
+    setIsSavingAddress(true);
+    try {
+      const created = await addAddress({
+        fullName: newFullName.trim() || user.fullName,
+        phone: newPhone.trim(),
+        addressLine1: newAddressLine.trim(),
+        area: newArea.trim(),
+        city: newCity.trim(),
+      });
+      setShowNewAddressForm(false);
+      setSelectedAddress(created.id);
+      setNewAddressLine('');
+    } catch (e) {
+      Alert.alert('Could not save address', getErrorMessage(e));
+    } finally {
+      setIsSavingAddress(false);
+    }
   };
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
     if (!selectedAddress) {
       Alert.alert('Missing Address', 'Please select or add a delivery address.');
       return;
     }
+    if (items.length === 0) return;
 
     setIsPlacingOrder(true);
     haptic.medium();
 
-    setTimeout(() => {
-      const isLahore = selectedAddress.isLahore && deliveryType === 'LAHORE_EXPRESS_2HR';
-      const estimatedText = isLahore
-        ? '⚡ Guaranteed within 120 minutes (Lahore Express)'
-        : '📦 Estimated delivery in 2-3 business days';
+    const lines = items.map((i) => ({
+      productId: i.product.id,
+      quantity: i.quantity,
+      selectedVariants: i.selectedVariants ?? {},
+    }));
 
-      const placedOrder = addOrder({
-        items,
-        subtotal: summary.subtotal,
-        discount: summary.discount,
-        deliveryFee: summary.deliveryFee,
-        total: summary.total,
+    try {
+      // Server re-prices the cart (stock, voucher, fees) — trust its totals.
+      const validated = await ordersService.validateCart({
+        items: lines,
+        voucherCode: appliedVoucher?.code,
         deliveryType,
-        estimatedDeliveryText: estimatedText,
-        shippingAddress: selectedAddress,
-        paymentMethod,
-        paymentStatus: paymentMethod === 'CASH_ON_DELIVERY' ? 'COD' : 'PAID',
-        status: 'PLACED',
+        city: selectedAddress.city,
       });
 
-      clearCart();
-      setIsPlacingOrder(false);
+      const order = await ordersService.create({
+        items: items.map((i, idx) => ({ ...lines[idx], unitPrice: i.unitPrice })),
+        subtotal: validated.subtotal,
+        discount: validated.discount,
+        deliveryFee: validated.deliveryFee,
+        total: validated.total,
+        deliveryType,
+        shippingAddressId: selectedAddress.id,
+        paymentMethod,
+        voucherCode: appliedVoucher?.code,
+      });
 
-      navigation.replace('OrderSuccess', { order: placedOrder });
-    }, 1000);
+      prependOrder(order);
+      clearCart();
+      haptic.success();
+      navigation.replace('OrderSuccess', { order });
+    } catch (e) {
+      haptic.error();
+      Alert.alert('Order not placed', getErrorMessage(e));
+    } finally {
+      setIsPlacingOrder(false);
+    }
   };
 
   return (
@@ -159,13 +204,13 @@ export const CheckoutScreen: React.FC = () => {
               <Input label="Address" value={newAddressLine} onChangeText={setNewAddressLine} placeholder="House, Street" />
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 <View style={{ flex: 1 }}>
-                  <Input label="Area" value={newArea} onChangeText={setNewArea} placeholder="Gulberg" />
+                  <Input label="Area" value={newArea} onChangeText={setNewArea} placeholder="e.g. Gulberg III" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Input label="City" value={newCity} onChangeText={setNewCity} placeholder="Lahore" />
                 </View>
               </View>
-              <Button title="Save Address" onPress={handleAddNewAddress} size="sm" variant="primary" />
+              <Button title="Save Address" onPress={handleAddNewAddress} loading={isSavingAddress} size="sm" variant="primary" />
             </View>
           )}
 
@@ -334,7 +379,7 @@ export const CheckoutScreen: React.FC = () => {
       </ScrollView>
 
       {/* Sticky Place Order Bar */}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <View>
           <Text style={styles.bottomSub}>Total</Text>
           <Text style={styles.bottomTotal}>{formatPKR(summary.total)}</Text>

@@ -4,14 +4,19 @@
     <item name="android:editTextStyle">@style/ResetEditText</item>
     <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
     <item name="colorPrimary">@color/colorPrimary</item>
-    <item name="android:statusBarColor">#FF5B24</item>
+    <item name="colorAccent">@color/colorAccent</item>
+    <item name="android:statusBarColor">#FFFFFF</item>
+    <item name="android:windowLightStatusBar">true</item>
+    <item name="android:navigationBarColor">#FFFFFF</item>
+    <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
   </style>
   <style name="ResetEditText" parent="@android:style/Widget.EditText">
     <item name="android:padding">0dp</item>
     <item name="android:textColorHint">#c8c8c8</item>
     <item name="android:textColor">@android:color/black</item>
   </style>
+  <!-- Shown by the OS before the JS bundle paints; swapped for AppTheme in MainActivity.onCreate -->
   <style name="Theme.App.SplashScreen" parent="AppTheme">
-    <item name="android:windowBackground">@drawable/ic_launcher_background</item>
+    <item name="android:windowBackground">@drawable/splash_background</item>
   </style>
 </resources>

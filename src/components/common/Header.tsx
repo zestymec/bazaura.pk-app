@@ -1,11 +1,11 @@
 import React from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   Image,
 } from 'react-native';
+import { Text } from './AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MapPin, Search, Heart, ShoppingBag, Zap, ChevronDown } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
@@ -13,8 +13,11 @@ import { typography } from '../../theme/typography';
 import { radii } from '../../theme/spacing';
 import { useUserStore } from '../../store/useUserStore';
 import { useWishlistStore } from '../../store/useWishlistStore';
-import { useCartStore } from '../../store/useCartStore';
+import { useCartStore, selectCartCount } from '../../store/useCartStore';
 import { haptic } from '../../utils/haptics';
+
+const BRAND_MARK = require('../../../assets/brand/mark.png');
+const BRAND_WORDMARK = require('../../../assets/brand/wordmark.png');
 
 interface HeaderProps {
   onSearchPress?: () => void;
@@ -42,13 +45,10 @@ export const Header: React.FC<HeaderProps> = ({
   showCart = true,
 }) => {
   const insets = useSafeAreaInsets();
-  const { user } = useUserStore();
-  const { wishlistIds } = useWishlistStore();
-  const { getItemCount } = useCartStore();
-
-  const cartCount = getItemCount();
-  const wishlistCount = wishlistIds.length;
-  const isLahore = user.selectedCity.toLowerCase() === 'lahore';
+  const selectedCity = useUserStore((s) => s.user.selectedCity);
+  const wishlistCount = useWishlistStore((s) => s.wishlistIds.length);
+  const cartCount = useCartStore(selectCartCount);
+  const isLahore = selectedCity.toLowerCase() === 'lahore';
 
   return (
     <View style={[styles.headerWrapper, { paddingTop: Math.max(insets.top, 12) }]}>
@@ -60,13 +60,13 @@ export const Header: React.FC<HeaderProps> = ({
           ) : (
             <View style={styles.brandContainer}>
               <View style={styles.logoRow}>
+                <Image source={BRAND_MARK} style={styles.logoImage} resizeMode="contain" />
                 <Image
-                  source={require('../../../assets/images/logo-icon.png')}
-                  style={styles.logoImage}
+                  source={BRAND_WORDMARK}
+                  style={styles.wordmark}
                   resizeMode="contain"
+                  accessibilityLabel="Bazaura"
                 />
-                <Text style={styles.brandName}>BAZAURA</Text>
-                <Text style={styles.brandDomain}>.PK</Text>
               </View>
 
               {showLocation && (
@@ -80,7 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <Zap size={11} color={colors.primary[500]} fill={colors.primary[500]} />
                   <Text style={styles.locationText} numberOfLines={1}>
-                    {isLahore ? 'Lahore • 2-Hour Express' : `${user.selectedCity} • 2-3 Days`}
+                    {isLahore ? 'Lahore • 2-Hour Express' : `${selectedCity} • 2-3 Days`}
                   </Text>
                   <ChevronDown size={11} color={colors.neutral[400]} />
                 </TouchableOpacity>
@@ -170,21 +170,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoImage: {
-    width: 24,
-    height: 24,
+    width: 26,
+    height: 32,
     marginRight: 6,
   },
-  brandName: {
-    fontSize: 18,
-    fontWeight: typography.weight.black,
-    color: colors.neutral[900],
-    letterSpacing: 0.5,
-  },
-  brandDomain: {
-    fontSize: 12,
-    fontWeight: typography.weight.extrabold,
-    color: colors.primary[500],
-    marginLeft: 2,
+  // Wordmark asset is 816×166; keep that ratio.
+  wordmark: {
+    width: 108,
+    height: 22,
   },
   locationRow: {
     flexDirection: 'row',

@@ -35,3 +35,15 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Android release signing (keep private, back up offline)
+*.keystore
+!android/app/debug.keystore
+android/keystore.properties
+
+# Build outputs
+release/
+ios/build/
+android/app/build/
+android/build/
+android/.gradle/

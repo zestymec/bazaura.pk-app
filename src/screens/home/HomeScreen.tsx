@@ -1,18 +1,20 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
-  ScrollView,
   FlatList,
   TouchableOpacity,
   RefreshControl,
   Animated,
   Easing,
   Platform,
+  ActivityIndicator,
+  useWindowDimensions,
+  ListRenderItemInfo,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
+import { Text } from '../../components/common/AppText';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -32,9 +34,10 @@ import { HeroBannerCarousel } from '../../components/home/HeroBannerCarousel';
 import { CategoryChips } from '../../components/home/CategoryChips';
 import { FlashDealsSection } from '../../components/home/FlashDealsSection';
 import { ProductCard } from '../../components/common/ProductCard';
-import { PRODUCTS } from '../../data/products';
-import { Product } from '../../types/product';
-import { PromoBanner, StoryItem } from '../../data/banners';
+import { Category, Product } from '../../types/product';
+import { PromoBanner, StoryItem } from '../../types/content';
+import { useHomeContent, useProducts } from '../../hooks/queries';
+import { getErrorMessage } from '../../api/errors';
 import { RootStackParamList } from '../../types/navigation';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
@@ -149,26 +152,26 @@ const TrustStrip: React.FC = () => (
 /*  Screen                                                             */
 /* ------------------------------------------------------------------ */
 
+const GRID_GAP = 10;
+
 export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
+  const { width } = useWindowDimensions();
+  const cardWidth = (width - 32 - GRID_GAP) / 2;
+
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [filterExpressOnly, setFilterExpressOnly] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [showTopBtn, setShowTopBtn] = useState(false);
 
-  const scrollRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlatList<Product>>(null);
   const topBtn = useRef(new Animated.Value(0)).current;
 
-  // One orchestrated entrance for the whole feed, not per-section.
-  const enter = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(enter, {
-      toValue: 1,
-      duration: 420,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [enter]);
+  const home = useHomeContent();
+  const catalog = useProducts({
+    category_id: selectedCategoryId ?? undefined,
+    express_only: filterExpressOnly || undefined,
+  });
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     Animated.spring(topBtn, {
@@ -182,160 +185,163 @@ export const HomeScreen: React.FC = () => {
   const onScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const y = e.nativeEvent.contentOffset.y;
-      if (y > 700 && !showTopBtn) setShowTopBtn(true);
-      if (y <= 700 && showTopBtn) setShowTopBtn(false);
+      if (y > 900 && !showTopBtn) setShowTopBtn(true);
+      if (y <= 900 && showTopBtn) setShowTopBtn(false);
     },
     [showTopBtn],
   );
 
   const scrollToTop = () => {
     haptic.light();
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
   };
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     haptic.light();
-    setTimeout(() => setRefreshing(false), 900);
-  };
+    await Promise.allSettled([home.refetch(), catalog.refetch()]);
+    setRefreshing(false);
+  }, [home, catalog]);
 
-  const handleProductPress = (product: Product) => {
-    navigation.navigate('ProductDetail', { product });
-  };
+  const handleProductPress = useCallback(
+    (product: Product) => navigation.navigate('ProductDetail', { product }),
+    [navigation],
+  );
 
-  const handleBannerPress = (banner: PromoBanner) => {
-    if (banner.targetType === 'REQUEST') {
-      navigation.navigate('MainTabs', { screen: 'RequestItemTab' });
-    } else if (banner.targetType === 'LAHORE_EXPRESS') {
-      setFilterExpressOnly(true);
-    } else if (banner.targetType === 'CATEGORY') {
-      navigation.navigate('MainTabs', {
-        screen: 'ExploreTab',
-        params: { searchQuery: banner.targetValue },
-      });
-    }
-  };
+  const goToExplore = useCallback(
+    (searchQuery?: string) => navigation.navigate('MainTabs', { screen: 'ExploreTab', params: { searchQuery } }),
+    [navigation],
+  );
 
-  const handleStoryPress = (story: StoryItem) => {
-    if (story.actionType === 'REQUEST') {
-      navigation.navigate('MainTabs', { screen: 'RequestItemTab' });
-    } else if (story.actionType === 'CATEGORY') {
-      navigation.navigate('MainTabs', {
-        screen: 'ExploreTab',
-        params: { searchQuery: story.actionTarget },
-      });
-    }
-  };
+  const handleBannerPress = useCallback(
+    (banner: PromoBanner) => {
+      if (banner.targetType === 'REQUEST') {
+        navigation.navigate('MainTabs', { screen: 'RequestItemTab' });
+      } else if (banner.targetType === 'LAHORE_EXPRESS') {
+        setFilterExpressOnly(true);
+      } else if (banner.targetType === 'CATEGORY' || banner.targetType === 'FLASH_DEAL') {
+        goToExplore(banner.targetValue);
+      }
+    },
+    [navigation, goToExplore],
+  );
 
-  const filteredProducts = useMemo(() => {
-    return PRODUCTS.filter((p) => {
-      const matchesCategory = selectedCategoryId
-        ? p.category.toLowerCase().includes(selectedCategoryId.replace('cat_', ''))
-        : true;
-      const matchesExpress = filterExpressOnly ? p.isLahoreExpress2Hour : true;
-      return matchesCategory && matchesExpress;
-    });
-  }, [selectedCategoryId, filterExpressOnly]);
+  const handleStoryPress = useCallback(
+    (story: StoryItem) => {
+      if (story.actionType === 'REQUEST') {
+        navigation.navigate('MainTabs', { screen: 'RequestItemTab' });
+      } else if (story.actionType === 'LAHORE_EXPRESS') {
+        setFilterExpressOnly(true);
+      } else {
+        goToExplore(story.actionTarget);
+      }
+    },
+    [navigation, goToExplore],
+  );
 
-  const expressProducts = useMemo(() => PRODUCTS.filter((p) => p.isLahoreExpress2Hour), []);
+  const handleSelectCategory = useCallback((cat: Category | null) => {
+    setSelectedCategoryId(cat ? cat.id : null);
+  }, []);
 
-  return (
-    <View style={styles.screenContainer}>
-      <Header
-        onSearchPress={() => navigation.navigate('MainTabs', { screen: 'ExploreTab' })}
-        onWishlistPress={() => navigation.navigate('Wishlist')}
-        onCartPress={() => navigation.navigate('MainTabs', { screen: 'CartTab' })}
-      />
+  const content = home.data;
+  const expressProducts = content?.expressRail ?? [];
 
-      <Animated.ScrollView
-        ref={scrollRef as any}
-        showsVerticalScrollIndicator={false}
-        onScroll={onScroll}
-        scrollEventThrottle={32}
-        // Category row pins under the header once you scroll past the banners.
-        stickyHeaderIndices={[3]}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[colors.primary[500]]}
-            tintColor={colors.primary[500]}
-            progressBackgroundColor={colors.neutral.white}
-          />
-        }
-        contentContainerStyle={styles.scrollContent}
-        style={{
-          opacity: enter,
-          transform: [
-            { translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) },
-          ],
-        }}
-      >
-        {/* 0 — Stories */}
-        <StoryBar onStoryPress={handleStoryPress} />
+  const renderRailItem = useCallback(
+    ({ item }: ListRenderItemInfo<Product>) => (
+      <View style={styles.railCardWrap}>
+        <ProductCard product={item} cardWidth={150} onPress={handleProductPress} />
+      </View>
+    ),
+    [handleProductPress],
+  );
 
-        {/* 1 — Delivery promise */}
+  const renderGridItem = useCallback(
+    ({ item }: ListRenderItemInfo<Product>) => (
+      <ProductCard product={item} cardWidth={cardWidth} onPress={handleProductPress} />
+    ),
+    [cardWidth, handleProductPress],
+  );
+
+  const onEndReached = useCallback(() => {
+    if (catalog.hasNextPage && !catalog.isFetchingNextPage) catalog.fetchNextPage();
+  }, [catalog]);
+
+  const listHeader = useMemo(
+    () => (
+      <View>
+        {/* Stories */}
+        {content ? (
+          <StoryBar stories={content.stories} onStoryPress={handleStoryPress} />
+        ) : (
+          <View style={styles.storySkeletonRow}>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Shimmer key={i} style={styles.storySkeleton} />
+            ))}
+          </View>
+        )}
+
+        {/* Delivery promise */}
         <DeliveryUSPBanner
           onLahoreExpressPress={() => setFilterExpressOnly((prev) => !prev)}
           onNationwidePress={() => setFilterExpressOnly(false)}
         />
 
-        {/* 2 — Hero banners */}
-        <HeroBannerCarousel onBannerPress={handleBannerPress} />
+        {/* Hero banners */}
+        {content ? (
+          <HeroBannerCarousel banners={content.heroBanners} onBannerPress={handleBannerPress} />
+        ) : (
+          <Shimmer style={styles.bannerSkeleton} />
+        )}
 
-        {/* 3 — Sticky category rail */}
+        {/* Category rail */}
         <View style={styles.stickyChips}>
           <CategoryChips
+            categories={content?.categories ?? []}
             selectedCategoryId={selectedCategoryId}
-            onSelectCategory={(cat) => setSelectedCategoryId(cat ? cat.id : null)}
+            onSelectCategory={handleSelectCategory}
           />
           <View style={styles.hairline} />
         </View>
 
-        {/* 4 — Trust strip */}
+        {/* Trust strip */}
         <TrustStrip />
 
-        {/* 5 — Flash deals */}
+        {/* Flash deals */}
         <FlashDealsSection
-          products={PRODUCTS}
+          products={content?.flashDeals ?? []}
           onProductPress={handleProductPress}
-          onSeeAllPress={() => navigation.navigate('MainTabs', { screen: 'ExploreTab' })}
+          onSeeAllPress={() => goToExplore()}
         />
 
-        {/* 6 — Express rail, tinted so it reads as its own shelf */}
-        <View style={styles.expressShelf}>
-          <SectionHeading
-            title="2-hour Lahore express"
-            caption={`${expressProducts.length} items in stock nearby`}
-            icon={<Zap size={15} color={colors.primary[500]} fill={colors.primary[500]} />}
-            actionLabel="See all"
-            onAction={() => {
-              haptic.selection();
-              setFilterExpressOnly(true);
-            }}
-          />
+        {/* Express rail, tinted so it reads as its own shelf */}
+        {expressProducts.length > 0 && (
+          <View style={styles.expressShelf}>
+            <SectionHeading
+              title="2-hour Lahore express"
+              caption={`${expressProducts.length} items in stock nearby`}
+              icon={<Zap size={15} color={colors.primary[500]} fill={colors.primary[500]} />}
+              actionLabel="See all"
+              onAction={() => {
+                haptic.selection();
+                setFilterExpressOnly(true);
+              }}
+            />
+            <FlatList
+              data={expressProducts}
+              keyExtractor={(item) => `express_${item.id}`}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.railList}
+              snapToInterval={160}
+              decelerationRate="fast"
+              initialNumToRender={3}
+              windowSize={3}
+              renderItem={renderRailItem}
+            />
+          </View>
+        )}
 
-          <FlatList
-            data={expressProducts}
-            keyExtractor={(item) => `express_${item.id}`}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.railList}
-            snapToInterval={160}
-            decelerationRate="fast"
-            renderItem={({ item }) => (
-              <View style={styles.railCardWrap}>
-                <ProductCard
-                  product={item}
-                  cardWidth={150}
-                  onPress={() => handleProductPress(item)}
-                />
-              </View>
-            )}
-          />
-        </View>
-
-        {/* 7 — Sourcing concierge */}
+        {/* Sourcing concierge */}
         <TouchableOpacity
           activeOpacity={0.9}
           onPress={() => {
@@ -344,13 +350,12 @@ export const HomeScreen: React.FC = () => {
           }}
           style={styles.conciergeCard}
         >
-          {/* soft depth without a gradient library */}
           <View pointerEvents="none" style={styles.conciergeGlowLarge} />
           <View pointerEvents="none" style={styles.conciergeGlowSmall} />
 
           <View style={styles.conciergeHeader}>
             <View style={styles.conciergeIconWrap}>
-              <Sparkles size={14} color={colors.secondary[700]} />
+              <Sparkles size={14} color={colors.primary[600]} />
             </View>
             <Text style={styles.conciergeTag}>Sourcing concierge</Text>
           </View>
@@ -366,8 +371,8 @@ export const HomeScreen: React.FC = () => {
           </View>
         </TouchableOpacity>
 
-        {/* 8 — Catalog grid */}
-        <View style={styles.gridSection}>
+        {/* Catalog heading */}
+        <View style={styles.gridHeading}>
           <SectionHeading
             title={filterExpressOnly ? 'Express in Lahore' : 'Recommended for you'}
             caption={
@@ -376,17 +381,15 @@ export const HomeScreen: React.FC = () => {
                 : 'Based on what shoppers near you are buying'
             }
             icon={
-              filterExpressOnly ? (
-                <Zap size={15} color={colors.primary[500]} fill={colors.primary[500]} />
-              ) : undefined
+              filterExpressOnly ? <Zap size={15} color={colors.primary[500]} fill={colors.primary[500]} /> : undefined
             }
           />
-
-          {filterExpressOnly && (
+          {(filterExpressOnly || selectedCategoryId) && (
             <TouchableOpacity
               onPress={() => {
                 haptic.light();
                 setFilterExpressOnly(false);
+                setSelectedCategoryId(null);
               }}
               style={styles.clearFilterPill}
               activeOpacity={0.8}
@@ -395,43 +398,102 @@ export const HomeScreen: React.FC = () => {
               <Text style={styles.clearFilterX}>✕</Text>
             </TouchableOpacity>
           )}
-
-          <View style={styles.gridContainer}>
-            {refreshing
-              ? [0, 1, 2, 3].map((i) => <SkeletonCard key={`sk_${i}`} />)
-              : filteredProducts.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    onPress={() => handleProductPress(product)}
-                  />
-                ))}
-          </View>
-
-          {!refreshing && filteredProducts.length === 0 && (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>Nothing here yet</Text>
-              <Text style={styles.emptySub}>
-                Clear the filter, or request the item and we’ll source it for you.
-              </Text>
-              <TouchableOpacity
-                style={styles.emptyBtn}
-                activeOpacity={0.85}
-                onPress={() => {
-                  setFilterExpressOnly(false);
-                  setSelectedCategoryId(null);
-                }}
-              >
-                <Text style={styles.emptyBtnText}>Show all products</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {!refreshing && filteredProducts.length > 0 && (
-            <Text style={styles.endNote}>You’re all caught up · bazaura.pk</Text>
-          )}
         </View>
-      </Animated.ScrollView>
+      </View>
+    ),
+    [
+      content,
+      expressProducts,
+      selectedCategoryId,
+      filterExpressOnly,
+      handleStoryPress,
+      handleBannerPress,
+      handleSelectCategory,
+      handleProductPress,
+      renderRailItem,
+      goToExplore,
+      navigation,
+    ],
+  );
+
+  const showSkeleton = catalog.isLoading || (catalog.isPlaceholderData && catalog.isFetching);
+
+  const listEmpty = showSkeleton ? (
+    <View style={styles.skeletonGrid}>
+      {[0, 1, 2, 3].map((i) => (
+        <SkeletonCard key={`sk_${i}`} />
+      ))}
+    </View>
+  ) : catalog.isError ? (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyTitle}>Couldn’t load products</Text>
+      <Text style={styles.emptySub}>{getErrorMessage(catalog.error)}</Text>
+      <TouchableOpacity style={styles.emptyBtn} activeOpacity={0.85} onPress={() => catalog.refetch()}>
+        <Text style={styles.emptyBtnText}>Try again</Text>
+      </TouchableOpacity>
+    </View>
+  ) : (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyTitle}>Nothing here yet</Text>
+      <Text style={styles.emptySub}>Clear the filter, or request the item and we’ll source it for you.</Text>
+      <TouchableOpacity
+        style={styles.emptyBtn}
+        activeOpacity={0.85}
+        onPress={() => {
+          setFilterExpressOnly(false);
+          setSelectedCategoryId(null);
+        }}
+      >
+        <Text style={styles.emptyBtnText}>Show all products</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const listFooter =
+    catalog.items.length === 0 ? null : catalog.isFetchingNextPage ? (
+      <ActivityIndicator color={colors.primary[500]} style={styles.footerSpinner} />
+    ) : !catalog.hasNextPage ? (
+      <Text style={styles.endNote}>You’re all caught up · bazaura.pk</Text>
+    ) : null;
+
+  return (
+    <View style={styles.screenContainer}>
+      <Header
+        onSearchPress={() => goToExplore()}
+        onWishlistPress={() => navigation.navigate('Wishlist')}
+        onCartPress={() => navigation.navigate('MainTabs', { screen: 'CartTab' })}
+      />
+
+      <FlatList
+        ref={listRef}
+        data={showSkeleton ? [] : catalog.items}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
+        renderItem={renderGridItem}
+        columnWrapperStyle={styles.gridRow}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={listEmpty}
+        ListFooterComponent={listFooter}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.6}
+        showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={32}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={7}
+        removeClippedSubviews={Platform.OS === 'android'}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary[500]]}
+            tintColor={colors.primary[500]}
+            progressBackgroundColor={colors.neutral.white}
+          />
+        }
+        contentContainerStyle={styles.scrollContent}
+      />
 
       {/* Back to top */}
       <Animated.View
@@ -592,10 +654,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 16,
     backgroundColor: colors.secondary[100],
+    borderColor: colors.secondary[200],
     borderRadius: radii.xl,
     padding: 16,
     borderWidth: 1,
-    borderColor: colors.surface.border,
     overflow: 'hidden',
     ...shadows.subtle,
   },
@@ -636,7 +698,7 @@ const styles = StyleSheet.create({
   conciergeTag: {
     fontSize: 11,
     fontWeight: typography.weight.bold,
-    color: colors.secondary[700],
+    color: colors.primary[700],
   },
   conciergeTitle: {
     fontSize: 16,
@@ -669,12 +731,43 @@ const styles = StyleSheet.create({
   },
 
   /* Grid */
-  gridSection: {
-    paddingHorizontal: 16,
+  gridHeading: {
     marginTop: 20,
+  },
+  gridRow: {
+    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+  },
+  skeletonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
+  footerSpinner: {
+    marginVertical: 18,
+  },
+  storySkeletonRow: {
+    flexDirection: 'row',
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: colors.neutral.white,
+  },
+  storySkeleton: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+  },
+  bannerSkeleton: {
+    height: 170,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: radii.xl,
   },
   clearFilterPill: {
     alignSelf: 'flex-start',
+    marginLeft: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -692,11 +785,6 @@ const styles = StyleSheet.create({
   clearFilterX: {
     fontSize: 11,
     color: colors.neutral[500],
-  },
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
   },
 
   /* Skeletons */

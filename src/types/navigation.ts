@@ -21,4 +21,5 @@ export type RootStackParamList = {
   Wishlist: undefined;
   AddressManagement: undefined;
   SupportHelp: undefined;
+  Login: { reason?: string } | undefined;
 };

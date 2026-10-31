@@ -5,6 +5,8 @@ import { ProductDetailScreen } from '../screens/product/ProductDetailScreen';
 import { CheckoutScreen } from '../screens/checkout/CheckoutScreen';
 import { OrderSuccessScreen } from '../screens/checkout/OrderSuccessScreen';
 import { WishlistScreen } from '../screens/wishlist/WishlistScreen';
+import { LoginScreen } from '../screens/auth/LoginScreen';
+import { colors } from '../theme/colors';
 import { RootStackParamList } from '../types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -15,7 +17,7 @@ export const RootNavigator: React.FC = () => {
       screenOptions={{
         headerShown: false,
         animation: 'slide_from_right',
-        contentStyle: { backgroundColor: '#F8FAFC' },
+        contentStyle: { backgroundColor: colors.surface.background },
       }}
     >
       <Stack.Screen name="MainTabs" component={TabNavigator} />
@@ -46,6 +48,15 @@ export const RootNavigator: React.FC = () => {
         component={WishlistScreen}
         options={{
           animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="Login"
+        component={LoginScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+          contentStyle: { backgroundColor: colors.neutral.white },
         }}
       />
     </Stack.Navigator>

@@ -1,10 +1,10 @@
 import React from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
+import { Text } from '../common/AppText';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -17,8 +17,8 @@ import {
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii, shadows } from '../../theme/spacing';
-import { useCartStore } from '../../store/useCartStore';
-import { useRequestStore } from '../../store/useRequestStore';
+import { useCartStore, selectCartCount } from '../../store/useCartStore';
+import { useRequestStore, selectActiveRequestCount } from '../../store/useRequestStore';
 import { haptic } from '../../utils/haptics';
 
 export const CustomTabBar: React.FC<BottomTabBarProps> = ({
@@ -27,13 +27,8 @@ export const CustomTabBar: React.FC<BottomTabBarProps> = ({
   navigation,
 }) => {
   const insets = useSafeAreaInsets();
-  const { getItemCount } = useCartStore();
-  const { requests } = useRequestStore();
-
-  const cartCount = getItemCount();
-  const activeRequestsCount = requests.filter(
-    (r) => r.status === 'SUBMITTED' || r.status === 'SOURCING_IN_PROGRESS' || r.status === 'PRICE_QUOTED'
-  ).length;
+  const cartCount = useCartStore(selectCartCount);
+  const activeRequestsCount = useRequestStore(selectActiveRequestCount);
 
   const getTabIcon = (routeName: string, isFocused: boolean) => {
     const color = isFocused ? colors.primary[500] : colors.neutral[400];

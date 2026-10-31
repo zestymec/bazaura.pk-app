@@ -12,3 +12,17 @@
 -keep class com.facebook.react.turbomodule.** { *; }
 
 # Add any project specific keep options here:
+-keep class com.facebook.hermes.unicode.** { *; }
+-keep class com.facebook.jni.** { *; }
+-keep class com.reactnativecommunity.netinfo.** { *; }
+-keep class com.imagepicker.** { *; }
+-keep class com.mkuczera.** { *; }
+-dontwarn com.facebook.react.**
+# New-architecture classes reached via JNI / reflection (react-native-screens reads FabricUIManager.mBinding)
+-keep class com.facebook.react.fabric.** { *; }
+-keep class com.facebook.react.uimanager.** { *; }
+-keep class com.swmansion.rnscreens.** { *; }
+-keep class com.swmansion.gesturehandler.** { *; }
+-keep class com.th3rdwave.safeareacontext.** { *; }
+-keep class com.horcrux.svg.** { *; }
+-keep class com.reactnativecommunity.asyncstorage.** { *; }

@@ -95,15 +95,22 @@ bazaura.pk/
 
 ## 🎨 Theme & Brand Tokens
 
-| Token Name | Hex Code | Purpose |
+Everything is derived from the logo (`assets/images/logo-transparent.png`): one deep orange on white.
+
+| Token | Hex | Purpose |
 | :--- | :--- | :--- |
-| `primary.500` | `#FF5B24` | Vibrant Core Brand Orange (CTAs, active pills, badges) |
-| `secondary.500`| `#D4AF37` | Signature Luxury Gold Accent (Sourcing Concierge) |
-| `surface.background`| `#F8F9FA`| Clean Off-White App Canvas |
-| `neutral.white`| `#FFFFFF` | Pure Card Surface |
-| `neutral.100` | `#F2F2F7` | iOS Grouped Fills & Controls |
-| `neutral.900` | `#111827` | High-Contrast Typography |
-| `neutral.500` | `#6B7280` | Muted Subtitle Typography |
+| `primary.500` | `#FF5722` | Bazaura Orange — exact logo colour (CTAs, active states, badges) |
+| `secondary.100` | `#FFEDE5` | Brand peach (from the banner gradient) — concierge / premium surfaces |
+| `surface.background` | `#FAF8F6` | Warm off-white canvas |
+| `neutral.900` | `#1C1917` | Titles (warm ink) |
+| `neutral.500` | `#78716C` | Secondary text |
+
+**Fonts** (`assets/fonts`, SIL OFL): **Fredoka** for headings (echoes the bubbly "BazAura" wordmark)
+and **Nunito** for body text. `src/components/common/AppText.tsx` picks the right file from each
+style's `fontWeight`/`fontSize`, so always import `Text`/`TextInput` from there, not `react-native`.
+
+Brand images (header mark, wordmark, login logo) live in `assets/brand/`. App icons and splash
+screens were generated from the logo for both platforms.
 
 ---
 
@@ -137,3 +144,23 @@ npm run ios
 ```bash
 npm run check-types
 ```
+
+### Building the shareable Android APK
+```bash
+cd android && ./gradlew assembleRelease
+# → android/app/build/outputs/apk/release/app-release.apk
+```
+Release builds are signed with `android/app/bazaura-release.keystore` using credentials in
+`android/keystore.properties`. **Both files are git-ignored. Back them up offline.** Every future
+Play Store update must be signed with the same key. Without `keystore.properties` the build
+falls back to the debug key.
+
+The APK targets ARM phones only (`reactNativeArchitectures` in `android/gradle.properties`).
+To test on an Intel emulator: `./gradlew assembleRelease -PreactNativeArchitectures=x86_64`.
+For the Play Store, upload an App Bundle instead: `./gradlew bundleRelease`.
+
+## 🔌 Backend / API
+
+The app runs on an in-app mock backend until the real API is ready. Switching is one flag in
+`src/config/env.ts` (`USE_MOCK_API`). See **[docs/BACKEND_INTEGRATION.md](docs/BACKEND_INTEGRATION.md)**
+for the exact contract the app expects.

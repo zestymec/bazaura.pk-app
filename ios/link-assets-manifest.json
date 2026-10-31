@@ -1,0 +1,49 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "assets/fonts/Fredoka-Bold.ttf",
+      "sha1": "ee386ed90315c92bb0d2e59b01be8ce149a47cfd"
+    },
+    {
+      "path": "assets/fonts/Fredoka-Medium.ttf",
+      "sha1": "297dc489377ef4d578ba20f744087f1b940c8407"
+    },
+    {
+      "path": "assets/fonts/Fredoka-SemiBold.ttf",
+      "sha1": "6322b0e579a5d058373b530ed4223676937f3db8"
+    },
+    {
+      "path": "assets/fonts/Nunito-Black.ttf",
+      "sha1": "1aaa8e7f7d6f849a3b755d990a5f1ce7679bcfe1"
+    },
+    {
+      "path": "assets/fonts/Nunito-Bold.ttf",
+      "sha1": "4a5919de94e0f2921f21a3b167e774247750d970"
+    },
+    {
+      "path": "assets/fonts/Nunito-ExtraBold.ttf",
+      "sha1": "ac593fed94239d588277b8aa81d95795a0535e8a"
+    },
+    {
+      "path": "assets/fonts/Nunito-Medium.ttf",
+      "sha1": "89dfbe25b6b4e6b69db686bf2ad77bc3807c839b"
+    },
+    {
+      "path": "assets/fonts/Nunito-Regular.ttf",
+      "sha1": "009645ac72727025f0ada90b13ff7ac05ad0f1f8"
+    },
+    {
+      "path": "assets/fonts/Nunito-SemiBold.ttf",
+      "sha1": "e0f596a101095266ddba84b2eb9aa7d39c08045a"
+    },
+    {
+      "path": "assets/fonts/OFL-Fredoka.txt",
+      "sha1": "704aaa2e50a4581f5cb249fb01c9055161b190a8"
+    },
+    {
+      "path": "assets/fonts/OFL-Nunito.txt",
+      "sha1": "ea1d3dd9f212f4cdc16caa33faa6ebe48860a8c4"
+    }
+  ]
+}

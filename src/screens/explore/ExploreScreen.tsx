@@ -1,28 +1,29 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
+  Keyboard,
+  ListRenderItemInfo,
+  useWindowDimensions,
 } from 'react-native';
+import { Text } from '../../components/common/AppText';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  Search,
-  X,
-  TrendingUp,
-  Clock,
-  Zap,
-  ArrowUpDown,
-} from 'lucide-react-native';
+import { Search, X, TrendingUp, Clock, Zap, ArrowUpDown } from 'lucide-react-native';
 import { Input } from '../../components/common/Input';
 import { ProductCard } from '../../components/common/ProductCard';
-import { CATEGORIES } from '../../data/categories';
-import { PRODUCTS } from '../../data/products';
-import { Product, Category } from '../../types/product';
+import { Product } from '../../types/product';
+import { ProductSort } from '../../types/api';
+import { useCategories, useProducts } from '../../hooks/queries';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { optimizeImageUrl } from '../../utils/images';
+import { getErrorMessage } from '../../api/errors';
 import { MainTabParamList, RootStackParamList } from '../../types/navigation';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
@@ -48,14 +49,30 @@ export const ExploreScreen: React.FC = () => {
   const route = useRoute<ExploreRouteProp>();
   const insets = useSafeAreaInsets();
 
-  const { recentSearches, addRecentSearch, clearRecentSearches } = useUserStore();
+  const { width } = useWindowDimensions();
+  const cardWidth = (width - 32 - 10) / 2;
+
+  const recentSearches = useUserStore((s) => s.recentSearches);
+  const addRecentSearch = useUserStore((s) => s.addRecentSearch);
+  const clearRecentSearches = useUserStore((s) => s.clearRecentSearches);
+  const { data: categories } = useCategories();
 
   const [searchQuery, setSearchQuery] = useState(route.params?.searchQuery || '');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(
-    route.params?.categorySlug || null
-  );
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [filterExpressOnly, setFilterExpressOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<'popularity' | 'priceAsc' | 'priceDesc' | 'rating'>('popularity');
+  const [sortBy, setSortBy] = useState<ProductSort>('popularity');
+
+  // The tab stays mounted, so react to new params when other screens deep-link here.
+  useEffect(() => {
+    if (route.params?.searchQuery !== undefined) setSearchQuery(route.params.searchQuery);
+    if (route.params?.categorySlug) {
+      const cat = categories.find((c) => c.slug === route.params?.categorySlug || c.id === route.params?.categorySlug);
+      if (cat) setSelectedCategory(cat.id);
+    }
+  }, [route.params, categories]);
+
+  // Wait for the user to pause typing before hitting the API.
+  const debouncedQuery = useDebouncedValue(searchQuery.trim(), 300);
 
   const handleSearchSubmit = (text: string) => {
     if (text.trim()) {
@@ -75,41 +92,29 @@ export const ExploreScreen: React.FC = () => {
     }
   };
 
-  const handleProductPress = (product: Product) => {
-    navigation.navigate('ProductDetail', { product });
-  };
-
-  const searchResults = useMemo(() => {
-    let list = PRODUCTS.filter((p) => {
-      const q = searchQuery.toLowerCase().trim();
-      const matchesQuery =
-        !q ||
-        p.title.toLowerCase().includes(q) ||
-        p.brand.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q) ||
-        p.tags.some((t) => t.toLowerCase().includes(q));
-
-      const matchesCategory =
-        !selectedCategory ||
-        p.category.toLowerCase().includes(selectedCategory.toLowerCase());
-
-      const matchesExpress = filterExpressOnly ? p.isLahoreExpress2Hour : true;
-
-      return matchesQuery && matchesCategory && matchesExpress;
-    });
-
-    if (sortBy === 'priceAsc') {
-      list = [...list].sort((a, b) => a.price - b.price);
-    } else if (sortBy === 'priceDesc') {
-      list = [...list].sort((a, b) => b.price - a.price);
-    } else if (sortBy === 'rating') {
-      list = [...list].sort((a, b) => b.rating - a.rating);
-    }
-
-    return list;
-  }, [searchQuery, selectedCategory, filterExpressOnly, sortBy]);
+  const handleProductPress = useCallback(
+    (product: Product) => navigation.navigate('ProductDetail', { product }),
+    [navigation],
+  );
 
   const isBrowsingCatalog = searchQuery.length > 0 || selectedCategory !== null || filterExpressOnly;
+
+  const results = useProducts(
+    {
+      search: debouncedQuery || undefined,
+      category_id: selectedCategory ?? undefined,
+      express_only: filterExpressOnly || undefined,
+      sort_by: sortBy,
+    },
+    isBrowsingCatalog,
+  );
+
+  const renderResult = useCallback(
+    ({ item }: ListRenderItemInfo<Product>) => (
+      <ProductCard product={item} cardWidth={cardWidth} onPress={handleProductPress} />
+    ),
+    [cardWidth, handleProductPress],
+  );
 
   return (
     <View style={[styles.container, { paddingTop: Math.max(insets.top, 10) }]}>
@@ -140,12 +145,13 @@ export const ExploreScreen: React.FC = () => {
         </View>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* If Not Actively Searching */}
-        {!isBrowsingCatalog && (
+      {!isBrowsingCatalog ? (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
+        >
+          {/* If Not Actively Searching */}
           <View>
             {/* Recent Searches */}
             {recentSearches.length > 0 && (
@@ -201,165 +207,163 @@ export const ExploreScreen: React.FC = () => {
 
             {/* Category Grid */}
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>
-                Browse Categories
-              </Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>Browse Categories</Text>
 
               <View style={styles.categoryGrid}>
-                {CATEGORIES.map((cat) => (
+                {categories.map((cat) => (
                   <TouchableOpacity
                     key={cat.id}
                     activeOpacity={0.88}
                     onPress={() => {
                       haptic.selection();
-                      setSelectedCategory(cat.slug);
+                      setSelectedCategory(cat.id);
                     }}
                     style={styles.categoryCard}
                   >
-                    <Image source={{ uri: cat.image }} style={styles.categoryImage} />
+                    <Image source={{ uri: optimizeImageUrl(cat.image, cardWidth) }} style={styles.categoryImage} />
                     <View style={styles.categoryOverlay}>
                       <Text style={styles.categoryName}>{cat.name}</Text>
-                      <Text style={styles.categoryCount}>
-                        {cat.itemCount.toLocaleString()} items
-                      </Text>
+                      <Text style={styles.categoryCount}>{cat.itemCount.toLocaleString()} items</Text>
                     </View>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
           </View>
-        )}
-
-        {/* If Searching / Filtering */}
-        {isBrowsingCatalog && (
-          <View>
-            {/* Filter Pills Bar */}
-            <View style={styles.filterBar}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    haptic.selection();
-                    setFilterExpressOnly((prev) => !prev);
-                  }}
-                  style={[
-                    styles.filterPill,
-                    filterExpressOnly && styles.filterPillActive,
-                  ]}
+        </ScrollView>
+      ) : (
+        <FlatList
+          data={results.items}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          renderItem={renderResult}
+          columnWrapperStyle={styles.resultsRow}
+          keyboardShouldPersistTaps="handled"
+          onScrollBeginDrag={Keyboard.dismiss}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          initialNumToRender={6}
+          windowSize={7}
+          onEndReachedThreshold={0.6}
+          onEndReached={() => {
+            if (results.hasNextPage && !results.isFetchingNextPage) results.fetchNextPage();
+          }}
+          ListHeaderComponent={
+            <View>
+              {/* Filter Pills Bar */}
+              <View style={styles.filterBar}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.filterScroll}
                 >
-                  <Zap
-                    size={11}
-                    color={filterExpressOnly ? colors.neutral.white : colors.primary[500]}
-                    fill={filterExpressOnly ? colors.neutral.white : colors.primary[500]}
-                  />
-                  <Text
-                    style={[
-                      styles.filterPillText,
-                      filterExpressOnly && styles.filterPillTextActive,
-                    ]}
-                  >
-                    2-Hr Express
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    haptic.selection();
-                    setSortBy(sortBy === 'priceAsc' ? 'priceDesc' : 'priceAsc');
-                  }}
-                  style={[
-                    styles.filterPill,
-                    (sortBy === 'priceAsc' || sortBy === 'priceDesc') && styles.filterPillActive,
-                  ]}
-                >
-                  <ArrowUpDown
-                    size={11}
-                    color={sortBy.startsWith('price') ? colors.neutral.white : colors.neutral[600]}
-                  />
-                  <Text
-                    style={[
-                      styles.filterPillText,
-                      sortBy.startsWith('price') && styles.filterPillTextActive,
-                    ]}
-                  >
-                    {sortBy === 'priceAsc' ? 'Price: Low' : sortBy === 'priceDesc' ? 'Price: High' : 'Price'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    haptic.selection();
-                    setSortBy(sortBy === 'rating' ? 'popularity' : 'rating');
-                  }}
-                  style={[
-                    styles.filterPill,
-                    sortBy === 'rating' && styles.filterPillActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.filterPillText,
-                      sortBy === 'rating' && styles.filterPillTextActive,
-                    ]}
-                  >
-                    ⭐ Top Rated
-                  </Text>
-                </TouchableOpacity>
-
-                {(selectedCategory || filterExpressOnly || searchQuery) && (
                   <TouchableOpacity
+                    activeOpacity={0.8}
                     onPress={() => {
-                      haptic.light();
-                      setSelectedCategory(null);
-                      setFilterExpressOnly(false);
-                      setSearchQuery('');
-                      setSortBy('popularity');
+                      haptic.selection();
+                      setFilterExpressOnly((prev) => !prev);
                     }}
-                    style={styles.resetPill}
+                    style={[styles.filterPill, filterExpressOnly && styles.filterPillActive]}
                   >
-                    <Text style={styles.resetText}>Reset ✕</Text>
+                    <Zap
+                      size={11}
+                      color={filterExpressOnly ? colors.neutral.white : colors.primary[500]}
+                      fill={filterExpressOnly ? colors.neutral.white : colors.primary[500]}
+                    />
+                    <Text style={[styles.filterPillText, filterExpressOnly && styles.filterPillTextActive]}>
+                      2-Hr Express
+                    </Text>
                   </TouchableOpacity>
-                )}
-              </ScrollView>
-            </View>
 
-            <View style={styles.resultsCountRow}>
-              <Text style={styles.resultsCountText}>
-                {searchResults.length} {searchResults.length === 1 ? 'result' : 'results'}
-              </Text>
-            </View>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      haptic.selection();
+                      setSortBy(sortBy === 'priceAsc' ? 'priceDesc' : 'priceAsc');
+                    }}
+                    style={[
+                      styles.filterPill,
+                      (sortBy === 'priceAsc' || sortBy === 'priceDesc') && styles.filterPillActive,
+                    ]}
+                  >
+                    <ArrowUpDown
+                      size={11}
+                      color={sortBy.startsWith('price') ? colors.neutral.white : colors.neutral[600]}
+                    />
+                    <Text style={[styles.filterPillText, sortBy.startsWith('price') && styles.filterPillTextActive]}>
+                      {sortBy === 'priceAsc' ? 'Price: Low' : sortBy === 'priceDesc' ? 'Price: High' : 'Price'}
+                    </Text>
+                  </TouchableOpacity>
 
-            {/* Results Grid */}
-            {searchResults.length > 0 ? (
-              <View style={styles.resultsGrid}>
-                {searchResults.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    onPress={() => handleProductPress(product)}
-                  />
-                ))}
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      haptic.selection();
+                      setSortBy(sortBy === 'rating' ? 'popularity' : 'rating');
+                    }}
+                    style={[styles.filterPill, sortBy === 'rating' && styles.filterPillActive]}
+                  >
+                    <Text style={[styles.filterPillText, sortBy === 'rating' && styles.filterPillTextActive]}>
+                      ⭐ Top Rated
+                    </Text>
+                  </TouchableOpacity>
+
+                  {(selectedCategory || filterExpressOnly || searchQuery) && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        haptic.light();
+                        setSelectedCategory(null);
+                        setFilterExpressOnly(false);
+                        setSearchQuery('');
+                        setSortBy('popularity');
+                      }}
+                      style={styles.resetPill}
+                    >
+                      <Text style={styles.resetText}>Reset ✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </ScrollView>
               </View>
+
+              <View style={styles.resultsCountRow}>
+                <Text style={styles.resultsCountText}>
+                  {results.isFetching && !results.isFetchingNextPage
+                    ? 'Searching…'
+                    : `${results.total} ${results.total === 1 ? 'result' : 'results'}`}
+                </Text>
+              </View>
+            </View>
+          }
+          ListFooterComponent={
+            results.isFetchingNextPage ? (
+              <ActivityIndicator color={colors.primary[500]} style={{ marginVertical: 18 }} />
+            ) : null
+          }
+          ListEmptyComponent={
+            results.isLoading ? (
+              <ActivityIndicator color={colors.primary[500]} style={{ marginTop: 40 }} />
             ) : (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyTitle}>No products found</Text>
+                <Text style={styles.emptyTitle}>{results.isError ? 'Search failed' : 'No products found'}</Text>
                 <Text style={styles.emptySubtitle}>
-                  Can’t find what you need? Use our Sourcing Concierge to request any custom item.
+                  {results.isError
+                    ? getErrorMessage(results.error)
+                    : 'Can’t find what you need? Use our Sourcing Concierge to request any custom item.'}
                 </Text>
                 <TouchableOpacity
                   activeOpacity={0.8}
-                  onPress={() => navigation.navigate('MainTabs', { screen: 'RequestItemTab' })}
+                  onPress={() =>
+                    results.isError ? results.refetch() : navigation.navigate('MainTabs', { screen: 'RequestItemTab' })
+                  }
                   style={styles.requestCtaBtn}
                 >
-                  <Text style={styles.requestCtaText}>Request This Item</Text>
+                  <Text style={styles.requestCtaText}>{results.isError ? 'Try Again' : 'Request This Item'}</Text>
                 </TouchableOpacity>
               </View>
-            )}
-          </View>
-        )}
-      </ScrollView>
+            )
+          }
+        />
+      )}
     </View>
   );
 };
@@ -387,6 +391,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 24,
+  },
+  resultsRow: {
+    paddingHorizontal: 16,
+    justifyContent: 'space-between',
   },
   section: {
     paddingHorizontal: 16,

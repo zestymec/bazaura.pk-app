@@ -1,12 +1,12 @@
 import React, { useCallback } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   Image,
   Dimensions,
 } from 'react-native';
+import { Text } from './AppText';
 import { Heart, Plus, Star, Zap } from 'lucide-react-native';
 import { Product } from '../../types/product';
 import { colors } from '../../theme/colors';
@@ -16,10 +16,11 @@ import { formatPKR } from '../../utils/formatters';
 import { useWishlistStore } from '../../store/useWishlistStore';
 import { useCartStore } from '../../store/useCartStore';
 import { haptic } from '../../utils/haptics';
+import { optimizeImageUrl } from '../../utils/images';
 
 interface ProductCardProps {
   product: Product;
-  onPress: () => void;
+  onPress: (product: Product) => void;
   cardWidth?: number;
 }
 
@@ -40,13 +41,13 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({
   }, [toggleWishlist, product.id]);
 
   const handleQuickAdd = useCallback(() => {
-    addItem(product, 1);
+    if (product.inStock) addItem(product, 1);
   }, [addItem, product]);
 
   const handlePress = useCallback(() => {
     haptic.light();
-    onPress();
-  }, [onPress]);
+    onPress(product);
+  }, [onPress, product]);
 
   return (
     <TouchableOpacity
@@ -60,10 +61,16 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({
       {/* Product Image Container */}
       <View style={styles.imageContainer}>
         <Image
-          source={{ uri: product.images[0] }}
+          source={{ uri: optimizeImageUrl(product.images[0], cardWidth) }}
           style={styles.image}
           resizeMode="cover"
+          fadeDuration={150}
         />
+        {!product.inStock && (
+          <View style={styles.soldOutOverlay}>
+            <Text style={styles.soldOutText}>Sold out</Text>
+          </View>
+        )}
 
         {/* Top Floating Row: Badges & Wishlist */}
         <View style={styles.topRow}>
@@ -83,6 +90,8 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({
             activeOpacity={0.75}
             onPress={handleWishlistToggle}
             style={styles.wishlistBtn}
+            hitSlop={8}
+            accessibilityLabel={isFavorite ? 'Remove from wishlist' : 'Add to wishlist'}
           >
             <Heart
               size={15}
@@ -124,7 +133,10 @@ export const ProductCard: React.FC<ProductCardProps> = React.memo(({
           <TouchableOpacity
             activeOpacity={0.75}
             onPress={handleQuickAdd}
-            style={styles.addBtn}
+            disabled={!product.inStock}
+            style={[styles.addBtn, !product.inStock && styles.addBtnDisabled]}
+            hitSlop={8}
+            accessibilityLabel="Add to cart"
           >
             <Plus size={16} color={colors.neutral.white} strokeWidth={2.5} />
           </TouchableOpacity>
@@ -259,11 +271,30 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
   },
   addBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 10,
     backgroundColor: colors.primary[500],
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  addBtnDisabled: {
+    backgroundColor: colors.neutral[300],
+  },
+  soldOutOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  soldOutText: {
+    fontSize: 11,
+    fontWeight: typography.weight.extrabold,
+    color: colors.neutral[800],
+    backgroundColor: colors.neutral.white,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
   },
 });

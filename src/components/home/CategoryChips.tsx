@@ -2,12 +2,12 @@ import React from 'react';
 import {
   ScrollView,
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   Image,
 } from 'react-native';
-import { CATEGORIES } from '../../data/categories';
+import { Text } from '../common/AppText';
+import { optimizeImageUrl } from '../../utils/images';
 import { Category } from '../../types/product';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
@@ -15,11 +15,13 @@ import { radii } from '../../theme/spacing';
 import { haptic } from '../../utils/haptics';
 
 interface CategoryChipsProps {
+  categories: Category[];
   selectedCategoryId: string | null;
   onSelectCategory: (category: Category | null) => void;
 }
 
 export const CategoryChips: React.FC<CategoryChipsProps> = React.memo(({
+  categories,
   selectedCategoryId,
   onSelectCategory,
 }) => {
@@ -53,7 +55,7 @@ export const CategoryChips: React.FC<CategoryChipsProps> = React.memo(({
         </TouchableOpacity>
 
         {/* Category Chips */}
-        {CATEGORIES.map((cat) => {
+        {categories.map((cat) => {
           const isSelected = selectedCategoryId === cat.id;
           return (
             <TouchableOpacity
@@ -68,7 +70,7 @@ export const CategoryChips: React.FC<CategoryChipsProps> = React.memo(({
                 isSelected && styles.activeChip,
               ]}
             >
-              <Image source={{ uri: cat.image }} style={styles.chipThumbnail} />
+              <Image source={{ uri: optimizeImageUrl(cat.image, 40) }} style={styles.chipThumbnail} />
               <Text
                 style={[
                   styles.chipText,

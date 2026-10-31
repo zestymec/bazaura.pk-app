@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   Image,
@@ -11,14 +10,17 @@ import {
   NativeScrollEvent,
   ListRenderItemInfo,
 } from 'react-native';
+import { Text } from '../common/AppText';
 import { ChevronRight } from 'lucide-react-native';
-import { PROMO_BANNERS, PromoBanner } from '../../data/banners';
+import { PromoBanner } from '../../types/content';
+import { optimizeImageUrl } from '../../utils/images';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii, shadows } from '../../theme/spacing';
 import { haptic } from '../../utils/haptics';
 
 interface HeroBannerCarouselProps {
+  banners: PromoBanner[];
   onBannerPress: (banner: PromoBanner) => void;
 }
 
@@ -26,6 +28,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_WIDTH = SCREEN_WIDTH - 32;
 
 export const HeroBannerCarousel: React.FC<HeroBannerCarouselProps> = React.memo(({
+  banners,
   onBannerPress,
 }) => {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -33,10 +36,10 @@ export const HeroBannerCarousel: React.FC<HeroBannerCarouselProps> = React.memo(
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const slideSize = event.nativeEvent.layoutMeasurement.width;
     const index = Math.round(event.nativeEvent.contentOffset.x / slideSize);
-    if (index !== activeIndex && index >= 0 && index < PROMO_BANNERS.length) {
+    if (index !== activeIndex && index >= 0 && index < banners.length) {
       setActiveIndex(index);
     }
-  }, [activeIndex]);
+  }, [activeIndex, banners.length]);
 
   const renderBannerItem = useCallback(({ item }: ListRenderItemInfo<PromoBanner>) => (
     <TouchableOpacity
@@ -48,7 +51,7 @@ export const HeroBannerCarousel: React.FC<HeroBannerCarouselProps> = React.memo(
       style={[styles.bannerCard, { width: BANNER_WIDTH }]}
     >
       <Image
-        source={{ uri: item.imageUrl }}
+        source={{ uri: optimizeImageUrl(item.imageUrl, BANNER_WIDTH) }}
         style={styles.bannerImage}
         resizeMode="cover"
       />
@@ -76,7 +79,7 @@ export const HeroBannerCarousel: React.FC<HeroBannerCarouselProps> = React.memo(
   return (
     <View style={styles.container}>
       <FlatList
-        data={PROMO_BANNERS}
+        data={banners}
         keyExtractor={(item) => item.id}
         horizontal
         pagingEnabled
@@ -88,7 +91,7 @@ export const HeroBannerCarousel: React.FC<HeroBannerCarouselProps> = React.memo(
 
       {/* Clean Pagination Dots */}
       <View style={styles.paginationRow}>
-        {PROMO_BANNERS.map((_, idx) => (
+        {banners.map((_, idx) => (
           <View
             key={idx}
             style={[

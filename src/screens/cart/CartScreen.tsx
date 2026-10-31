@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Image,
   Alert,
 } from 'react-native';
+import { Text } from '../../components/common/AppText';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,13 +22,17 @@ import {
 } from 'lucide-react-native';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { useShallow } from 'zustand/react/shallow';
 import { useCartStore } from '../../store/useCartStore';
+import { useRequireAuth } from '../../hooks/useRequireAuth';
+import { calculateTotals, FREE_SHIPPING_THRESHOLD } from '../../utils/pricing';
 import { RootStackParamList } from '../../types/navigation';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii, shadows } from '../../theme/spacing';
 import { formatPKR } from '../../utils/formatters';
 import { haptic } from '../../utils/haptics';
+import { optimizeImageUrl } from '../../utils/images';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -45,14 +49,28 @@ export const CartScreen: React.FC = () => {
     setDeliveryType,
     applyVoucher,
     removeVoucher,
-    getSummary,
-  } = useCartStore();
+  } = useCartStore(
+    useShallow((s) => ({
+      items: s.items,
+      deliveryType: s.deliveryType,
+      appliedVoucher: s.appliedVoucher,
+      updateQuantity: s.updateQuantity,
+      removeItem: s.removeItem,
+      setDeliveryType: s.setDeliveryType,
+      applyVoucher: s.applyVoucher,
+      removeVoucher: s.removeVoucher,
+    })),
+  );
+  const requireAuth = useRequireAuth();
 
   const [voucherInput, setVoucherInput] = useState('');
   const [voucherError, setVoucherError] = useState('');
 
-  const summary = getSummary();
-  const freeShippingThreshold = 10000;
+  const summary = useMemo(
+    () => calculateTotals(items, deliveryType, appliedVoucher),
+    [items, deliveryType, appliedVoucher],
+  );
+  const freeShippingThreshold = FREE_SHIPPING_THRESHOLD;
   const progressToFreeShipping = Math.min(1, summary.subtotal / freeShippingThreshold);
   const remainingForFreeShipping = Math.max(0, freeShippingThreshold - summary.subtotal);
 
@@ -73,6 +91,7 @@ export const CartScreen: React.FC = () => {
       return;
     }
     haptic.medium();
+    if (!requireAuth('Log in to place your order. Your bag is saved.')) return;
     navigation.navigate('Checkout');
   };
 
@@ -189,7 +208,7 @@ export const CartScreen: React.FC = () => {
                     !isLast && styles.itemRowBorder,
                   ]}
                 >
-                  <Image source={{ uri: item.product.images[0] }} style={styles.itemImage} />
+                  <Image source={{ uri: optimizeImageUrl(item.product.images[0], 80) }} style={styles.itemImage} />
 
                   <View style={styles.itemDetails}>
                     <View style={styles.itemHeader}>

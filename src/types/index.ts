@@ -4,3 +4,5 @@ export * from './request';
 export * from './order';
 export * from './user';
 export * from './navigation';
+export * from './content';
+export * from './api';

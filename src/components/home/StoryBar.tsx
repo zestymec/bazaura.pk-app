@@ -2,22 +2,25 @@ import React from 'react';
 import {
   ScrollView,
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   Image,
 } from 'react-native';
-import { STORY_ITEMS, StoryItem } from '../../data/banners';
+import { Text } from '../common/AppText';
+import { StoryItem } from '../../types/content';
+import { optimizeImageUrl } from '../../utils/images';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { radii } from '../../theme/spacing';
 import { haptic } from '../../utils/haptics';
 
 interface StoryBarProps {
+  stories: StoryItem[];
   onStoryPress: (story: StoryItem) => void;
 }
 
-export const StoryBar: React.FC<StoryBarProps> = ({ onStoryPress }) => {
+export const StoryBar: React.FC<StoryBarProps> = React.memo(({ stories, onStoryPress }) => {
+  if (stories.length === 0) return null;
   return (
     <View style={styles.container}>
       <ScrollView
@@ -25,7 +28,7 @@ export const StoryBar: React.FC<StoryBarProps> = ({ onStoryPress }) => {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {STORY_ITEMS.map((item) => (
+        {stories.map((item) => (
           <TouchableOpacity
             key={item.id}
             activeOpacity={0.8}
@@ -42,7 +45,7 @@ export const StoryBar: React.FC<StoryBarProps> = ({ onStoryPress }) => {
               ]}
             >
               <View style={styles.avatarInner}>
-                <Image source={{ uri: item.imageUrl }} style={styles.avatarImage} />
+                <Image source={{ uri: optimizeImageUrl(item.imageUrl, 64) }} style={styles.avatarImage} />
               </View>
             </View>
 
@@ -54,7 +57,7 @@ export const StoryBar: React.FC<StoryBarProps> = ({ onStoryPress }) => {
       </ScrollView>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -1,11 +1,11 @@
 import React from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   Image,
 } from 'react-native';
+import { Text } from '../../components/common/AppText';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +24,7 @@ import { typography } from '../../theme/typography';
 import { radii, shadows } from '../../theme/spacing';
 import { formatPKR } from '../../utils/formatters';
 import { haptic } from '../../utils/haptics';
+import { optimizeImageUrl } from '../../utils/images';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type OrderSuccessRouteProp = RouteProp<RootStackParamList, 'OrderSuccess'>;
@@ -137,7 +138,7 @@ export const OrderSuccessScreen: React.FC = () => {
 
           {order.items.map((item) => (
             <View key={item.id} style={styles.itemRow}>
-              <Image source={{ uri: item.product.images[0] }} style={styles.itemThumb} />
+              <Image source={{ uri: optimizeImageUrl(item.product.images[0], 56) }} style={styles.itemThumb} />
               <View style={{ flex: 1, marginLeft: 8 }}>
                 <Text style={styles.itemTitle} numberOfLines={1}>
                   {item.product.title}

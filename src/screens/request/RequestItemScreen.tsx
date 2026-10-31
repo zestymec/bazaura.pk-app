@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Alert,
   Image,
 } from 'react-native';
+import { Text } from '../../components/common/AppText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Sparkles,
@@ -25,7 +25,11 @@ import {
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
-import { CATEGORIES } from '../../data/categories';
+import { launchImageLibrary } from 'react-native-image-picker';
+import { useCategories } from '../../hooks/queries';
+import { useRequireAuth } from '../../hooks/useRequireAuth';
+import { uploadsService } from '../../api/services/uploads';
+import { getErrorMessage } from '../../api/errors';
 import { useRequestStore } from '../../store/useRequestStore';
 import { useUserStore } from '../../store/useUserStore';
 import { RequestStatus } from '../../types/request';
@@ -38,82 +42,107 @@ import { haptic } from '../../utils/haptics';
 
 export const RequestItemScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const { requests, submitRequest, acceptQuote } = useRequestStore();
-  const { user } = useUserStore();
+  const requests = useRequestStore((s) => s.requests);
+  const submitRequest = useRequestStore((s) => s.submitRequest);
+  const acceptQuote = useRequestStore((s) => s.acceptQuote);
+  const user = useUserStore((s) => s.user);
+  const requireAuth = useRequireAuth();
+  const { data: categories } = useCategories();
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'NEW_REQUEST' | 'MY_REQUESTS'>('NEW_REQUEST');
 
   // Form State
   const [itemName, setItemName] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0].name);
+  const [selectedCategory, setSelectedCategory] = useState('Electronics & Smart Tech');
   const [brandOrModel, setBrandOrModel] = useState('');
   const [expectedPrice, setExpectedPrice] = useState('');
   const [referenceUrl, setReferenceUrl] = useState('');
   const [description, setDescription] = useState('');
   const [urgency, setUrgency] = useState<'LAHORE_2HR_EXPRESS' | 'STANDARD_NATIONWIDE'>('LAHORE_2HR_EXPRESS');
-  const [contactPhone, setContactPhone] = useState(user.phone || '03001234567');
+  const [contactPhone, setContactPhone] = useState(user.phone);
   const [deliveryAddress, setDeliveryAddress] = useState(
-    user.addresses[0]?.addressLine1 ? `${user.addresses[0].addressLine1}, ${user.addresses[0].area}` : 'Main Boulevard, Gulberg III'
+    user.addresses[0]?.addressLine1 ? `${user.addresses[0].addressLine1}, ${user.addresses[0].area}` : ''
   );
   const [city, setCity] = useState(user.selectedCity || 'Lahore');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const samplePhotoUrls = [
-    'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1600080972464-8e5f35f63d08?w=800&auto=format&fit=crop&q=80',
-  ];
-
-  const handleSimulatePhotoUpload = () => {
+  const handlePickPhoto = async () => {
     haptic.selection();
-    const randomImg = samplePhotoUrls[Math.floor(Math.random() * samplePhotoUrls.length)];
-    setAttachedImage(randomImg);
+    try {
+      const res = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: 1,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        quality: 0.8,
+      });
+      const uri = res.assets?.[0]?.uri;
+      if (uri) setAttachedImage(uri);
+      else if (res.errorMessage) Alert.alert('Photo', res.errorMessage);
+    } catch (e) {
+      Alert.alert('Photo', getErrorMessage(e));
+    }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!itemName.trim()) {
       Alert.alert('Required Field', 'Please enter the item name or description you want us to source.');
       return;
     }
-
     if (!contactPhone.trim() || !isValidPakistaniPhone(contactPhone)) {
       Alert.alert('Invalid Phone', 'Please enter a valid Pakistani contact phone number (e.g. 03001234567).');
       return;
     }
-
     if (!deliveryAddress.trim()) {
       Alert.alert('Required Address', 'Please provide your delivery address.');
       return;
     }
+    if (!requireAuth('Log in so our concierge can send you a price quote.')) return;
 
     setIsSubmitting(true);
     haptic.medium();
-
-    setTimeout(() => {
-      submitRequest({
+    try {
+      const imageUris = attachedImage ? [await uploadsService.uploadImage(attachedImage, 'sourcing_requests')] : [];
+      const price = expectedPrice ? parseFloat(expectedPrice.replace(/[^0-9.]/g, '')) : undefined;
+      await submitRequest({
         itemName: itemName.trim(),
         category: selectedCategory,
         brandOrModel: brandOrModel.trim() || undefined,
-        expectedPrice: expectedPrice ? parseFloat(expectedPrice) : undefined,
+        expectedPrice: price && !isNaN(price) ? price : undefined,
         referenceUrl: referenceUrl.trim() || undefined,
         description: description.trim() || 'Custom item requested via Bazaura Sourcing Concierge.',
-        imageUris: attachedImage ? [attachedImage] : [],
+        imageUris,
         urgency,
         contactPhone: contactPhone.trim(),
         deliveryAddress: deliveryAddress.trim(),
         city,
       });
-
-      setIsSubmitting(false);
       setItemName('');
       setBrandOrModel('');
       setExpectedPrice('');
       setReferenceUrl('');
       setDescription('');
       setAttachedImage(null);
-
       setActiveTab('MY_REQUESTS');
-    }, 600);
+    } catch (e) {
+      haptic.error();
+      Alert.alert('Request not sent', getErrorMessage(e));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAcceptQuote = async (id: string) => {
+    setAcceptingId(id);
+    try {
+      await acceptQuote(id);
+    } catch (e) {
+      Alert.alert('Could not accept quote', getErrorMessage(e));
+    } finally {
+      setAcceptingId(null);
+    }
   };
 
   const getStatusBadge = (status: RequestStatus) => {
@@ -219,7 +248,7 @@ export const RequestItemScreen: React.FC = () => {
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>Category</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-                {CATEGORIES.map((cat) => (
+                {categories.map((cat) => (
                   <TouchableOpacity
                     key={cat.id}
                     activeOpacity={0.75}
@@ -293,11 +322,11 @@ export const RequestItemScreen: React.FC = () => {
               ) : (
                 <TouchableOpacity
                   activeOpacity={0.75}
-                  onPress={handleSimulatePhotoUpload}
+                  onPress={handlePickPhoto}
                   style={styles.uploadBox}
                 >
                   <UploadCloud size={20} color={colors.neutral[500]} />
-                  <Text style={styles.uploadText}>Attach sample photo or screenshot</Text>
+                  <Text style={styles.uploadText}>Attach a photo or screenshot</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -423,7 +452,8 @@ export const RequestItemScreen: React.FC = () => {
                         {req.status === 'PRICE_QUOTED' && (
                           <Button
                             title="Accept Quote & Order"
-                            onPress={() => acceptQuote(req.id)}
+                            onPress={() => handleAcceptQuote(req.id)}
+                            loading={acceptingId === req.id}
                             size="sm"
                             variant="primary"
                             icon={<CheckCircle2 size={14} color={colors.neutral.white} />}

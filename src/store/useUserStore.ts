@@ -1,225 +1,129 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { UserProfile } from '../types/user';
 import { Order, ShippingAddress } from '../types/order';
-import { generateId } from '../utils/formatters';
+import { NewAddressPayload } from '../types/api';
 import { haptic } from '../utils/haptics';
-import { sound } from '../utils/audio';
+import { persistStorage } from './persist';
+import { usersService } from '../api/services/users';
+
+export const GUEST_USER: UserProfile = {
+  id: 'guest',
+  fullName: '',
+  email: '',
+  phone: '',
+  selectedCity: 'Lahore',
+  isLahoreExpressEligible: true,
+  memberSince: '',
+  addresses: [],
+};
 
 interface UserState {
+  /** Session flag. Tokens themselves live in api/tokenStorage. */
+  isAuthenticated: boolean;
   user: UserProfile;
   orders: Order[];
   recentSearches: string[];
   selectedAddressId: string;
 
-  // Actions
+  setSession: (user: UserProfile) => void;
+  resetToGuest: () => void;
+  setUser: (user: UserProfile) => void;
+  setOrders: (orders: Order[]) => void;
+  prependOrder: (order: Order) => void;
+
   setSelectedCity: (city: string) => void;
   setSelectedAddress: (addressId: string) => void;
-  addAddress: (address: Omit<ShippingAddress, 'id'>) => ShippingAddress;
-  addOrder: (order: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'timeline'>) => Order;
+  addAddress: (address: NewAddressPayload) => Promise<ShippingAddress>;
   addRecentSearch: (query: string) => void;
   clearRecentSearches: () => void;
   updateProfile: (data: Partial<UserProfile>) => void;
 }
 
-export const useUserStore = create<UserState>((set, get) => ({
-  user: {
-    id: 'usr_bazaura_01',
-    fullName: 'Muhammad Ali',
-    email: 'ali.lahore@example.pk',
-    phone: '03001234567',
-    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80',
-    selectedCity: 'Lahore',
-    isLahoreExpressEligible: true,
-    memberSince: 'August 2026',
-    defaultAddressId: 'addr_1',
-    addresses: [
-      {
-        id: 'addr_1',
-        fullName: 'Muhammad Ali',
-        phone: '03001234567',
-        addressLine1: 'House #42, Street 14, Sector Y, Phase 3',
-        area: 'DHA Phase 3',
-        city: 'Lahore',
-        postalCode: '54792',
-        isLahore: true,
-        isDefault: true,
+export const useUserStore = create<UserState>()(
+  persist(
+    (set, get) => ({
+      isAuthenticated: false,
+      user: GUEST_USER,
+      orders: [],
+      recentSearches: [],
+      selectedAddressId: '',
+
+      setSession: (user) =>
+        set({
+          isAuthenticated: true,
+          user,
+          selectedAddressId: user.defaultAddressId || user.addresses[0]?.id || '',
+        }),
+
+      resetToGuest: () =>
+        set((s) => ({
+          isAuthenticated: false,
+          user: { ...GUEST_USER, selectedCity: s.user.selectedCity, isLahoreExpressEligible: s.user.isLahoreExpressEligible },
+          orders: [],
+          selectedAddressId: '',
+        })),
+
+      setUser: (user) => set({ user }),
+      setOrders: (orders) => set({ orders }),
+      prependOrder: (order) => set((s) => ({ orders: [order, ...s.orders.filter((o) => o.id !== order.id)] })),
+
+      setSelectedCity: (city) => {
+        haptic.selection();
+        set((s) => ({
+          user: { ...s.user, selectedCity: city, isLahoreExpressEligible: city.toLowerCase() === 'lahore' },
+        }));
+        if (get().isAuthenticated) usersService.setCity(city).catch(() => {});
       },
-      {
-        id: 'addr_2',
-        fullName: 'Muhammad Ali (Office)',
-        phone: '03001234567',
-        addressLine1: 'Office 402, 4th Floor, Pace Tower, Gulberg III',
-        area: 'Gulberg III',
-        city: 'Lahore',
-        postalCode: '54660',
-        isLahore: true,
-        isDefault: false,
+
+      setSelectedAddress: (addressId) => {
+        haptic.selection();
+        set({ selectedAddressId: addressId });
       },
-    ],
-  },
-  selectedAddressId: 'addr_1',
-  recentSearches: ['iPhone 15 Pro Max', 'Airfryer', 'Dior Sauvage', 'Coffee', 'Anker 200W'],
-  orders: [
+
+      addAddress: async (data) => {
+        const created = await usersService.addAddress(data);
+        haptic.success();
+        set((s) => ({
+          user: { ...s.user, addresses: [...s.user.addresses, created] },
+          selectedAddressId: created.id,
+        }));
+        return created;
+      },
+
+      addRecentSearch: (query) => {
+        const clean = query.trim();
+        if (!clean) return;
+        set((s) => ({
+          recentSearches: [clean, ...s.recentSearches.filter((q) => q.toLowerCase() !== clean.toLowerCase())].slice(0, 8),
+        }));
+      },
+
+      clearRecentSearches: () => {
+        haptic.light();
+        set({ recentSearches: [] });
+      },
+
+      updateProfile: (data) => {
+        haptic.success();
+        set((s) => ({ user: { ...s.user, ...data } }));
+        if (get().isAuthenticated) {
+          const { fullName, email, avatarUrl } = data;
+          usersService.update({ fullName, email, avatarUrl }).catch(() => {});
+        }
+      },
+    }),
     {
-      id: 'ord_1001',
-      orderNumber: 'BZ-94821',
-      items: [
-        {
-          id: 'prod_4_std',
-          product: {
-            id: 'prod_4',
-            title: 'Nescafé Gold Rich & Smooth Premium Instant Coffee (200g Jar)',
-            brand: 'Nescafé',
-            category: 'Instant Essentials & Groceries',
-            price: 3450,
-            originalPrice: 3950,
-            discountPercent: 13,
-            rating: 4.9,
-            reviewCount: 512,
-            description: 'Crafted with Arabica coffee beans.',
-            images: ['https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=800&auto=format&fit=crop&q=80'],
-            features: ['2-Hour Lahore Delivery'],
-            inStock: true,
-            stockCount: 150,
-            isLahoreExpress2Hour: true,
-            nationwideDeliveryDays: '2-3 Days',
-            badge: '2-HOUR EXPRESS',
-            tags: ['coffee', 'groceries'],
-          },
-          quantity: 2,
-          unitPrice: 3450,
-          addedAt: Date.now() - 86400000,
-        },
-      ],
-      subtotal: 6900,
-      discount: 500,
-      deliveryFee: 0,
-      total: 6400,
-      deliveryType: 'LAHORE_EXPRESS_2HR',
-      estimatedDeliveryText: 'Delivered in 1 hr 18 mins (Lahore Express)',
-      shippingAddress: {
-        id: 'addr_1',
-        fullName: 'Muhammad Ali',
-        phone: '03001234567',
-        addressLine1: 'House #42, Street 14, Sector Y, Phase 3',
-        area: 'DHA Phase 3',
-        city: 'Lahore',
-        postalCode: '54792',
-        isLahore: true,
-        isDefault: true,
-      },
-      paymentMethod: 'CASH_ON_DELIVERY',
-      paymentStatus: 'COD',
-      status: 'DELIVERED',
-      createdAt: '2026-08-25T11:20:00.000Z',
-      timeline: [
-        { status: 'PLACED', title: 'Order Placed', description: 'Order received', timestamp: '11:20 AM', isCompleted: true },
-        { status: 'CONFIRMED', title: 'Confirmed & Packed', description: 'Packed at Gulberg Hub', timestamp: '11:32 AM', isCompleted: true },
-        { status: 'OUT_FOR_DELIVERY_2HR', title: 'Express Rider Dispatched', description: 'Rider on bike en route', timestamp: '11:45 AM', isCompleted: true },
-        { status: 'DELIVERED', title: 'Delivered to Doorstep', description: 'Received by Muhammad Ali', timestamp: '12:38 PM', isCompleted: true },
-      ],
+      name: 'bazaura.user',
+      storage: persistStorage,
+      version: 1,
+      partialize: (s) => ({
+        isAuthenticated: s.isAuthenticated,
+        user: s.user,
+        orders: s.orders,
+        recentSearches: s.recentSearches,
+        selectedAddressId: s.selectedAddressId,
+      }),
     },
-  ],
-
-  setSelectedCity: (city) => {
-    haptic.selection();
-    set((state) => ({
-      user: {
-        ...state.user,
-        selectedCity: city,
-        isLahoreExpressEligible: city.toLowerCase() === 'lahore',
-      },
-    }));
-  },
-
-  setSelectedAddress: (addressId) => {
-    haptic.selection();
-    set({ selectedAddressId: addressId });
-  },
-
-  addAddress: (addressData) => {
-    haptic.success();
-    const newAddr: ShippingAddress = {
-      id: generateId('addr'),
-      ...addressData,
-    };
-    set((state) => ({
-      user: {
-        ...state.user,
-        addresses: [...state.user.addresses, newAddr],
-      },
-      selectedAddressId: newAddr.id,
-    }));
-    return newAddr;
-  },
-
-  addOrder: (orderData) => {
-    haptic.success();
-    sound.playSuccess();
-    const now = new Date();
-    const isLahore = orderData.shippingAddress.isLahore && orderData.deliveryType === 'LAHORE_EXPRESS_2HR';
-    const orderNumber = `BZ-${Math.floor(10000 + Math.random() * 90000)}`;
-
-    const newOrder: Order = {
-      id: generateId('ord'),
-      orderNumber,
-      createdAt: now.toISOString(),
-      ...orderData,
-      timeline: [
-        {
-          status: 'PLACED',
-          title: 'Order Placed Successfully',
-          description: `Order ${orderNumber} received. Preparing for express fulfillment.`,
-          timestamp: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          isCompleted: true,
-        },
-        {
-          status: 'PREPARING',
-          title: 'Packing at Nearest Fulfillment Hub',
-          description: isLahore ? 'Picking items at Lahore Central Hub.' : 'Transferring to Pakistan Post / Courier Express.',
-          timestamp: 'In progress',
-          isCompleted: false,
-        },
-        {
-          status: isLahore ? 'OUT_FOR_DELIVERY_2HR' : 'OUT_FOR_DELIVERY_2HR',
-          title: isLahore ? '⚡ 2-Hour Express Rider Dispatch' : 'Courier Out for Delivery',
-          description: isLahore ? 'Rider assigned for rapid delivery in under 120 mins.' : 'Courier en route to your city address.',
-          timestamp: isLahore ? 'Estimated in 35 mins' : 'Estimated 2-3 Days',
-          isCompleted: false,
-        },
-      ],
-    };
-
-    set((state) => ({
-      orders: [newOrder, ...state.orders],
-    }));
-
-    return newOrder;
-  },
-
-  addRecentSearch: (query) => {
-    const clean = query.trim();
-    if (!clean) return;
-    set((state) => {
-      const filtered = state.recentSearches.filter((s) => s.toLowerCase() !== clean.toLowerCase());
-      return {
-        recentSearches: [clean, ...filtered].slice(0, 8),
-      };
-    });
-  },
-
-  clearRecentSearches: () => {
-    haptic.light();
-    set({ recentSearches: [] });
-  },
-
-  updateProfile: (data) => {
-    haptic.success();
-    set((state) => ({
-      user: {
-        ...state.user,
-        ...data,
-      },
-    }));
-  },
-}));
+  ),
+);

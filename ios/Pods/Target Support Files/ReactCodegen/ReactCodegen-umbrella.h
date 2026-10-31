@@ -43,6 +43,8 @@
 #import "rngesturehandler_codegenJSI.h"
 #import "RNHapticFeedbackSpec/RNHapticFeedbackSpec.h"
 #import "RNHapticFeedbackSpecJSI.h"
+#import "RNImagePickerSpec/RNImagePickerSpec.h"
+#import "RNImagePickerSpecJSI.h"
 #import "rnscreens/rnscreens.h"
 #import "rnscreensJSI.h"
 #import "rnsvg/rnsvg.h"
